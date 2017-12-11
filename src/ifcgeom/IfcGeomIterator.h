@@ -348,20 +348,17 @@ class Iterator {
     if (current_triangulation_) { ret = current_triangulation_; }
     else if (current_serialization_) { ret = current_serialization_; }
     else if (current_shape_model_) { ret = current_shape_model_; }
-
     // If we want to organize the element considering their hierarchy
     if (settings_.get(IteratorSettings::SEARCH_FLOOR))
     {
       // We are going to build a vector with the element parents.
       // First, create the parent vector
       std::vector<const IfcGeom::Element<P>*> parents;
-				
       // if the element has a parent
       if (ret->parent_id() != -1)
       {
         const IfcGeom::Element<P>* parent_object = NULL;
         bool hasParent = true;
-
         // get the parent 
         try {
           parent_object = getObject(ret->parent_id());
@@ -369,10 +366,8 @@ class Iterator {
           Logger::Error(e);
           hasParent = false;
         }
-
         // Add the previously found parent to the vector
         if (hasParent) parents.insert(parents.begin(), parent_object);
-					
         // We need to find all the parents
         while (parent_object != NULL && hasParent && parent_object->parent_id() != -1)
         {
@@ -383,18 +378,14 @@ class Iterator {
             Logger::Error(e);
             hasParent = false;
           }
-
           // Add the previously found parent to the vector
           if (hasParent) parents.insert(parents.begin(), parent_object);
-
           hasParent = hasParent && parent_object->parent_id() != -1;
         }
-
         // when done_ push the parent list in the Element object
         ret->SetParents(parents);
       }
     }
-
     return ret;
   }
 
