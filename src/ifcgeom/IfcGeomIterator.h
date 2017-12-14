@@ -95,7 +95,7 @@ namespace IfcGeom {
 template <typename P>
 class Iterator {
 
- public:
+  public:
   Iterator(const IteratorSettings& settings, IfcParse::IfcFile* file, std::vector<IfcGeom::filter_t>& filters)
       : settings_(settings)
       , ifc_file_(file)
@@ -336,7 +336,6 @@ class Iterator {
     if (ifcproducts_) {
       ++ifcproduct_iterator_;
     }
-
     return create();
   }
 
