@@ -77,7 +77,7 @@ or Clang 3.5 has been confirmed to work.
 
 ### Compiling on *nix
 
-The following instructions are for Ubuntu, modify as required for other operating systems. [nix/build-all.sh] script
+The following instructions are for Ubuntu, modify as required for other operating systems. [nix/build-all.py] script
 can be experimented with and studied for pointers for other operating systems, but note that this script is not currently
 meant to be used for a typical IfcOpenShell workspace setup.
 
@@ -214,4 +214,4 @@ Usage examples
 [Visual C++ Build Tools]: http://landinghub.visualstudio.com/visual-cpp-build-tools "Visual C++ Build Tools"
 [MSYS2]: https://msys2.github.io/ "MSYS2"
 [win/readme.md]: https://github.com/IfcOpenShell/IfcOpenShell/tree/master/win/readme.md "win/readme.md"
-[nix/build-all.sh]: https://github.com/IfcOpenShell/IfcOpenShell/tree/master/nix/build-all.sh "nix/build-all.sh"
+[nix/build-all.py]: https://github.com/IfcOpenShell/IfcOpenShell/tree/master/nix/build-all.py "nix/build-all.py"

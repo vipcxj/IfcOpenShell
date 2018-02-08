@@ -192,7 +192,7 @@ set DEPENDENCY_DIR=N/A
 set ICU_VER=58.2
 set ICU_ZIP=icu-%ICU_VER%-vs%VS_VER%.7z
 cd "%DEPS_DIR%"
-call :DownloadFile http://www.npcglib.org/~stathis/downloads/%ICU_ZIP% "%DEPS_DIR%" %ICU_ZIP%
+call :DownloadFile https://www.npcglib.org/~stathis/downloads/%ICU_ZIP% "%DEPS_DIR%" %ICU_ZIP%
 IF NOT %ERRORLEVEL%==0 GOTO :Error
 call :ExtractArchive %ICU_ZIP% "%DEPS_DIR%" "%INSTALL_DIR%\icu"
 IF NOT %ERRORLEVEL%==0 GOTO :Error
@@ -279,6 +279,7 @@ if exist "%DEPS_DIR%\%OCCT_FILENAME%" (
     :: Therefore check if the directory contains a full checkout [using a single file as proxy] and delete the directory tree if it is not.
     if not exist "%DEPS_DIR%\%OCCT_FILENAME%\OCCT_LGPL_EXCEPTION.txt". rd /s/q "%DEPS_DIR%\%OCCT_FILENAME%"
 )
+
 
 call :ExtractArchive %OCCT_FILENAME%.tar.gz "%DEPS_DIR%" "%DEPENDENCY_DIR%"
 if not %ERRORLEVEL%==0 goto :Error

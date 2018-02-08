@@ -44,10 +44,13 @@
 
 #include <Geom_Curve.hxx>
 #include <Geom_Line.hxx>
+#include <Geom_Plane.hxx>
 #include <Geom_Circle.hxx>
 #include <Geom_Ellipse.hxx>
 #include <gp_Ax22d.hxx>
 #include <Standard_Version.hxx>
+#include <GeomAPI.hxx>
+
 #include "../ifcparse/IfcGlobalId.h"
 
 #include "SvgSerializer.h"
@@ -76,10 +79,32 @@ void SvgSerializer::write(path_object& p, const TopoDS_Wire& wire) {
 
 		double u1, u2;
 		Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, u1, u2);
+		Handle(Geom2d_Curve) curve2d;
+		if (curve.IsNull()) {
+			TopLoc_Location loc;
+			Handle_Geom_Surface surf;
+			
+			BRep_Tool::CurveOnSurface(edge, curve2d, surf, loc, u1, u2);
+			
+			if (curve2d.IsNull()) {
+				Logger::Error("Failed to obtain 2d and 3d curve from edge");
+				continue;
+			}
 
-        Handle(Standard_Type) ty = curve->DynamicType();
+			Handle(Standard_Type) sty = surf->DynamicType();
+			if (sty != STANDARD_TYPE(Geom_Plane)) {
+				Logger::Error("Non-planar p-curves are not supported by this serializer");
+				continue;
+			}
+
+			gp_Pln pln = Handle(Geom_Plane)::DownCast(surf)->Pln();
+			curve = GeomAPI::To3d(curve2d, pln);
+		}
+
+		Handle(Standard_Type) ty = curve->DynamicType();
         bool conical = (ty == STANDARD_TYPE(Geom_Circle) || ty == STANDARD_TYPE(Geom_Ellipse));
         bool closed = ALMOST_THE_SAME(u1 + PI2, u2);
+
         if (conical && closed) {
             if (first) {
                 if (ty == STANDARD_TYPE(Geom_Circle)) {
@@ -257,7 +282,7 @@ SvgSerializer::path_object& SvgSerializer::start_path(IfcSchema::IfcBuildingStor
 
 void SvgSerializer::write(const IfcGeom::BRepElement<real_t>* o)
 {
-	IfcSchema::IfcBuildingStorey* storey = 0;
+	IfcSchema::IfcBuildingStorey* storey = storey_;
 	boost::optional<double> storey_elevation = boost::none;
 	IfcSchema::IfcObjectDefinition* obdef = static_cast<IfcSchema::IfcObjectDefinition*>(file->entityById(o->id()));
 
@@ -267,7 +292,7 @@ void SvgSerializer::write(const IfcGeom::BRepElement<real_t>* o)
 	typedef IfcSchema::IfcRelAggregates decomposition_element;
 #endif
 
-	for (;;) {
+	for (; storey == 0;) {
 		// Iterate over the decomposing element to find the parent IfcBuildingStorey
 		decomposition_element::list::ptr decomposes = obdef->Decomposes();
 		if (!decomposes->size()) {
@@ -327,27 +352,27 @@ void SvgSerializer::write(const IfcGeom::BRepElement<real_t>* o)
 			if (pnt.Z() < zmin) { zmin = pnt.Z(); }
 			if (pnt.Z() > zmax) { zmax = pnt.Z(); }
 		}}
-
-		if (section_height) {
-			if (zmin > section_height || zmax < section_height) continue;
-		} else {
-			if (zmin == inf || (zmax - zmin) < 1.) continue;
-		}
-
-		// Priority:
-		// 1) section_height
-		// 2) Storey elevation + 1m
-		// 3) zmin + 1m
+		
+		// Empty geometry, no vertices encountered
+		if (zmin == inf) continue;
+		
+		// Determine slicing plane z coordinate, priority:
+		// 1) explicitly set global section height
+		// 2) containing building storey elevation + 1m
+		// 3) zmin (from geometry bounding box) + 1m
 		double cut_z;
 		if (section_height) {
 			cut_z = section_height.get();
-		} else if (storey_elevation) {
+		} else if (storey_elevation && !(zmin > *storey_elevation || zmax < *storey_elevation)) {
 			cut_z = storey_elevation.get() + 1.;
 		} else {
 			cut_z = zmin + 1.;
 		}
 
-		// Create a horizontal cross section 1 meter above the bottom point of the shape		
+		// No intersection with bounding box, fail early
+		if (zmin > cut_z || zmax < cut_z) continue;
+
+		// Evaluate cross section geometry
 		TopoDS_Shape result = BRepAlgoAPI_Section(moved_shape, gp_Pln(gp_Pnt(0, 0, cut_z), gp::DZ()));
 
 		Handle(TopTools_HSequenceOfShape) edges = new TopTools_HSequenceOfShape();
