@@ -262,6 +262,9 @@ class Iterator {
     
     done_ = 0;
     total_ = representations_->size();
+
+    Logger::Status("\rIterating over " + boost::lexical_cast<std::string>(total_) + " representations..");
+
     for (int i = 1; i < 4; ++i) {
       bounds_min_.SetCoord(i, std::numeric_limits<double>::infinity());
       bounds_max_.SetCoord(i, -std::numeric_limits<double>::infinity());
