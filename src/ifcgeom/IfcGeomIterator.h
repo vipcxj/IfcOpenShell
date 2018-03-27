@@ -637,71 +637,426 @@ class Iterator {
           continue;
         }
 
-        // Filter the products based on the set of entities and/or names being included or excluded for processing.
-        for (IfcSchema::IfcProduct::list::it jt = unfiltered_products->begin(); jt != unfiltered_products->end(); ++jt) {
-          IfcSchema::IfcProduct* prod = *jt;
-          if (boost::all(filters_, filter_match_(prod))) {
-            ifcproducts_->push(prod);
-          }
+        /// @note Double always as per IFC specification.
+        double getUnitMagnitude() const { return unit_magnitude; }
+	
+		std::string getLog() const { return Logger::GetLog(); }
+
+		IfcParse::IfcFile* getFile() const { return ifc_file; }
+
+        const std::vector<IfcGeom::filter_t>& filters() const { return filters_; }
+        std::vector<IfcGeom::filter_t>& filters() { return filters_; }
+
+        const gp_XYZ& bounds_min() const { return bounds_min_; }
+        const gp_XYZ& bounds_max() const { return bounds_max_; }
+
+	private:
+		// Move to the next IfcRepresentation
+		void _nextShape() {
+			// In order to conserve memory and reduce cache insertion times, the cache is
+			// cleared after an arbitary number of processed representations. This has been
+			// benchmarked extensively: https://github.com/IfcOpenShell/IfcOpenShell/pull/47
+			static const int clear_interval = 64;
+			if (done % clear_interval == clear_interval - 1) {
+				kernel.purge_cache();
+			}
+			ifcproducts.reset();
+			++ representation_iterator;
+			++ done;
+		}
+
+		bool geometry_reuse_ok_for_current_representation_;
+
+		bool reuse_ok_(const IfcSchema::IfcProduct::list::ptr& products) {
+			// With world coords enabled, object transformations are directly applied to
+			// the BRep. There is no way to re-use the geometry for multiple products.
+			if (settings.get(IteratorSettings::USE_WORLD_COORDS)) {
+				return false;
+			}
+
+			std::set<const IfcSchema::IfcMaterial*> associated_single_materials;
+
+			for (IfcSchema::IfcProduct::list::it it = products->begin(); it != products->end(); ++it) {
+				IfcSchema::IfcProduct* product = *it;
+
+				if (!settings.get(IteratorSettings::DISABLE_OPENING_SUBTRACTIONS) && kernel.find_openings(product)->size()) {
+					return false;
+				}
+
+				if (settings.get(IteratorSettings::APPLY_LAYERSETS)) {
+					IfcSchema::IfcRelAssociates::list::ptr associations = product->HasAssociations();
+					for (IfcSchema::IfcRelAssociates::list::it jt = associations->begin(); jt != associations->end(); ++jt) {
+						IfcSchema::IfcRelAssociatesMaterial* assoc = (*jt)->as<IfcSchema::IfcRelAssociatesMaterial>();
+						if (assoc) {
+							if (assoc->RelatingMaterial()->is(IfcSchema::Type::IfcMaterialLayerSetUsage)) {
+								// TODO: Check whether single layer? 
+								return false;
+							}
+						}
+					}
+				}
+
+				// Note that this can be a nullptr (!), but the fact that set size should be one still holds
+				associated_single_materials.insert(kernel.get_single_material_association(product));
+			}
+
+			return associated_single_materials.size() == 1;
+		}
+
+		BRepElement<P>* create_shape_model_for_next_entity() {
+			for (;;) {
+				IfcSchema::IfcRepresentation* representation;
+
+				// Have we reached the end of our list of representations?
+				if ( representation_iterator == representations->end() ) {
+					representations.reset();
+					return 0;
+				}
+				representation = *representation_iterator;
+
+				// Has the list of IfcProducts for this representation been initialized?
+				if (!ifcproducts) {
+					ifcproducts = IfcSchema::IfcProduct::list::ptr(new IfcSchema::IfcProduct::list);
+					IfcSchema::IfcProduct::list::ptr unfiltered_products = kernel.products_represented_by(representation);
+
+					geometry_reuse_ok_for_current_representation_ = reuse_ok_(unfiltered_products);
+
+					IfcSchema::IfcRepresentationMap::list::ptr maps = representation->RepresentationMap();
+
+					if (!geometry_reuse_ok_for_current_representation_ && maps->size() == 1) {
+						// unfiltered_products contains products represented by this representation by means of mapped items.
+						// For example because of openings applied to products, reuse might not be acceptable and then the
+						// products will be processed by means of their immediate representation and not the mapped representation.
+
+						// IfcRepresentationMaps are also used for IfcTypeProducts, so an additional check is performed whether the map
+						// is indeed used by IfcMappedItems.
+						IfcSchema::IfcRepresentationMap* map = *maps->begin();
+						if (map->MapUsage()->size() > 0) {
+							_nextShape();
+							continue;
+						}
+					}
+
+					bool representation_processed_as_mapped_item = false;
+
+					IfcSchema::IfcRepresentation* representation_mapped_to = kernel.representation_mapped_to(representation);
+					if (representation_mapped_to) {
+						// Check if this represenation has (or will be) processed as part its mapped representation
+						representation_processed_as_mapped_item = reuse_ok_(kernel.products_represented_by(representation_mapped_to));
+					}
+
+					if (representation_processed_as_mapped_item) {
+						_nextShape();
+						continue;
+					}
+
+                    // Filter the products based on the set of entities and/or names being included or excluded for processing.
+                    for (IfcSchema::IfcProduct::list::it jt = unfiltered_products->begin(); jt != unfiltered_products->end(); ++jt) {
+                        IfcSchema::IfcProduct* prod = *jt;
+                        if (boost::all(filters_, filter_match(prod))) {
+                            ifcproducts->push(prod);
+                        }
+                    }
+
+					ifcproduct_iterator = ifcproducts->begin();
+				}
+
+				// Have we reached the end of our list of IfcProducts?
+				if ( ifcproduct_iterator == ifcproducts->end() ) {
+					_nextShape();
+					continue;
+				}
+
+				IfcSchema::IfcProduct* product = *ifcproduct_iterator;
+                Logger::SetProduct(product);
+
+				BRepElement<P>* element;
+				if (ifcproduct_iterator == ifcproducts->begin() || !geometry_reuse_ok_for_current_representation_) {
+					element = kernel.create_brep_for_representation_and_product<P>(settings, representation, product);
+				} else {
+					element = kernel.create_brep_for_processed_representation(settings, representation, product, current_shape_model);
+				}
+
+				Logger::SetProduct(boost::none);
+
+				if (!element) {
+					_nextShape();
+					continue;
+				}
+
+				return element;
+			}
+		}
+
+		void free_shapes() {
+			// Free all possible representations of the current geometrical entity
+			delete current_triangulation;
+			current_triangulation = 0;
+			delete current_serialization;
+			current_serialization = 0;
+			delete current_shape_model;
+			current_shape_model = 0;
+		}
+
+    public:
+        /// Returns what would be the product for the next shape representation
+        /// @todo Double-check and test the impl.
+        //IfcSchema::IfcProduct* peek_next() const
+        //{
+        //    if (ifcproducts && ifcproduct_iterator + 1 != ifcproducts->end()){
+        //        return *(ifcproduct_iterator + 1);
+        //    } else {
+        //        return 0;
+        //    }
+        //}
+
+        /// @todo Would this be as simple as the following code?
+        //void skip_next() { if (ifcproducts) { ++ifcproduct_iterator; } }
+
+        /// Moves to the next shape representation, create its geometry, and returns the associated product.
+        /// Use get() to retrieve the created geometry.
+		IfcSchema::IfcProduct* next() {
+			// Increment the iterator over the list of products using the current
+			// shape representation
+			if (ifcproducts) {
+				++ifcproduct_iterator;
+			}
+
+			return create();
+		}
+
+        /// Gets the representation of the current geometrical entity.
+        Element<P>* get()
+        {
+            // TODO: Test settings and throw
+            Element<P>* ret = 0;
+            if (current_triangulation) { ret = current_triangulation; }
+            else if (current_serialization) { ret = current_serialization; }
+            else if (current_shape_model) { ret = current_shape_model; }
+
+			// If we want to organize the element considering their hierarchy
+			if (settings.get(IteratorSettings::SEARCH_FLOOR))
+			{
+				// We are going to build a vector with the element parents.
+				// First, create the parent vector
+				std::vector<const IfcGeom::Element<P>*> parents;
+				
+				// if the element has a parent
+				if (ret->parent_id() != -1)
+				{
+					const IfcGeom::Element<P>* parent_object = NULL;
+					bool hasParent = true;
+
+					// get the parent 
+					try {
+						parent_object = getObject(ret->parent_id());
+					} catch (const std::exception& e) {
+						Logger::Error(e);
+						hasParent = false;
+					}
+
+					// Add the previously found parent to the vector
+					if (hasParent) parents.insert(parents.begin(), parent_object);
+					
+					// We need to find all the parents
+					while (parent_object != NULL && hasParent && parent_object->parent_id() != -1)
+					{
+						// Find the next parent
+						try {
+							parent_object = getObject(parent_object->parent_id());
+						} catch (const std::exception& e) {
+							Logger::Error(e);
+							hasParent = false;
+						}
+
+						// Add the previously found parent to the vector
+						if (hasParent) parents.insert(parents.begin(), parent_object);
+
+						hasParent = hasParent && parent_object->parent_id() != -1;
+					}
+
+					// when done push the parent list in the Element object
+					ret->SetParents(parents);
+				}
+			}
+
+            return ret;
         }
 
-        ifcproduct_iterator_ = ifcproducts_->begin();
-      }
+		/// Gets the native (Open Cascade) representation of the current geometrical entity.
+		BRepElement<P>* get_native()
+		{
+			// TODO: Test settings and throw
+			return current_shape_model;
+		}
 
-      // Have we reached the end of our list of IfcProducts?
-      if ( ifcproduct_iterator_ == ifcproducts_->end() ) {
-        _nextShape();
-        continue;
-      }
+		const Element<P>* getObject(int id) {
+			gp_Trsf trsf;
+			int parent_id = -1;
+			std::string instance_type, product_name, product_guid;
+            IfcSchema::IfcProduct* ifc_product = 0;
 
-      IfcSchema::IfcProduct* product = *ifcproduct_iterator_;
-      Logger::SetProduct(product);
+			try {
+				IfcUtil::IfcBaseClass* ifc_entity = ifc_file->entityById(id);
+				instance_type = IfcSchema::Type::ToString(ifc_entity->type());
 
-      BRepElement<P>* element;
-      if (ifcproduct_iterator_ == ifcproducts_->begin() || !geometry_reuse_ok_for_current_representation_) {
-        element = kernel_.create_brep_for_representation_and_product<P>(settings_, representation, product);
-      } else {
-        element = kernel_.create_brep_for_processed_representation(settings_, representation, product, current_shape_model_);
-      }
+				if (ifc_entity->is(IfcSchema::Type::IfcRoot)) {
+					IfcSchema::IfcRoot* ifc_root = ifc_entity->as<IfcSchema::IfcRoot>();
+					product_guid = ifc_root->GlobalId();
+					product_name = ifc_root->hasName() ? ifc_root->Name() : "";
+				}
 
-      Logger::SetProduct(boost::none);
+				if (ifc_entity->is(IfcSchema::Type::IfcProduct)) {
+					ifc_product = ifc_entity->as<IfcSchema::IfcProduct>();
+					parent_id = -1;
+					try {
+						IfcSchema::IfcObjectDefinition* parent_object = kernel.get_decomposing_entity(ifc_product);
+						if (parent_object) {
+							parent_id = parent_object->entity->id();
+						}
+					} catch (const std::exception& e) {
+						Logger::Error(e);
+					} catch (...) {
+						Logger::Error("Failed to find decomposing entity");
+					}
 
-      if (!element) {
-        _nextShape();
-        continue;
-      }
+					try {
+						kernel.convert(ifc_product->ObjectPlacement(), trsf);
+					} catch (const std::exception& e) {
+						Logger::Error(e);
+					} catch (...) {
+						Logger::Error("Failed to construct placement");
+					}
+				}
+			} catch (const std::exception& e) {
+				Logger::Error(e);
+			} catch (const Standard_Failure& e) {
+				if (e.GetMessageString() && strlen(e.GetMessageString())) {
+					Logger::Error(e.GetMessageString());
+				} else {
+					Logger::Error("Unknown error returning product");
+				}
+			} catch (...) {
+				Logger::Error("Unknown error returning product");
+			}
 
-      return element;
-    }
-  }
+			ElementSettings element_settings(settings, unit_magnitude, instance_type);
 
-  void _free_shapes() {
-    // Free all possible representations_ of the current geometrical entity
-    delete current_triangulation_;
-    current_triangulation_ = 0;
-    delete current_serialization_;
-    current_serialization_ = 0;
-    delete current_shape_model_;
-    current_shape_model_ = 0;
-  }
+			Element<P>* ifc_object = new Element<P>(element_settings, id, parent_id, product_name, instance_type, product_guid, "", trsf, ifc_product);
+			return ifc_object;
+		}
 
-  void _initialize() {
-    current_triangulation_ = 0;
-    current_shape_model_ = 0;
-    current_serialization_ = 0;
-    unit_name_ = "METER";
-    unit_magnitude_ = 1.f;
-    kernel_.setValue(IfcGeom::Kernel::GV_MAX_FACES_TO_SEW,
-                    settings_.get(IteratorSettings::SEW_SHELLS) ? 1000 : -1);
-    kernel_.setValue(IfcGeom::Kernel::GV_DIMENSIONALITY,
-                    (settings_.get(IteratorSettings::INCLUDE_CURVES)
-                                                         ? (settings_.get(IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES) ? -1. : 0.) : +1.));
-    if (settings_.get(IteratorSettings::SITE_LOCAL_PLACEMENT)) {
-      kernel_.set_conversion_placement_rel_to(IfcSchema::Type::IfcSite);
-    }
-  } //end Iterator::_initialize
-  
-}; //end class Iterator
-} // end namespace IfcGeom
+		IfcSchema::IfcProduct* create() {
+			IfcGeom::BRepElement<P>* next_shape_model = 0;
+			IfcGeom::SerializedElement<P>* next_serialization = 0;
+			IfcGeom::TriangulationElement<P>* next_triangulation = 0;
+
+			try {
+				next_shape_model = create_shape_model_for_next_entity();
+			} catch (const std::exception& e) {
+				Logger::Error(e);
+			} catch (const Standard_Failure& e) {
+				if (e.GetMessageString() && strlen(e.GetMessageString())) {
+					Logger::Error(e.GetMessageString());
+				} else {
+					Logger::Error("Unknown error creating geometry");
+				}
+			} catch (...) {
+				Logger::Error("Unknown error creating geometry");
+			}
+
+			if (next_shape_model) {
+				if (settings.get(IteratorSettings::USE_BREP_DATA)) {
+					try {
+						next_serialization = new SerializedElement<P>(*next_shape_model);
+					} catch (...) {
+                        Logger::Message(Logger::LOG_ERROR, "Getting a serialized element from model failed.");
+					}
+				} else if (!settings.get(IteratorSettings::DISABLE_TRIANGULATION)) {
+					try {
+						if (ifcproduct_iterator == ifcproducts->begin() || !geometry_reuse_ok_for_current_representation_) {
+							next_triangulation = new TriangulationElement<P>(*next_shape_model);
+						} else {
+							next_triangulation = new TriangulationElement<P>(*next_shape_model, current_triangulation->geometry_pointer());
+						}
+					} catch (...) {
+                        Logger::Message(Logger::LOG_ERROR, "Getting a triangulation element from model failed.");
+					}
+				}
+			}
+
+			free_shapes();
+
+			current_shape_model = next_shape_model;
+			current_serialization = next_serialization;
+			current_triangulation = next_triangulation;
+
+            return next_shape_model ? next_shape_model->product() : 0;
+		}
+	private:
+		void _initialize() {
+			current_triangulation = 0;
+			current_shape_model = 0;
+			current_serialization = 0;
+
+			unit_name = "METER";
+			unit_magnitude = 1.f;
+
+            kernel.setValue(IfcGeom::Kernel::GV_MAX_FACES_TO_SEW, settings.get(IteratorSettings::SEW_SHELLS) ? 1000 : -1);
+            kernel.setValue(IfcGeom::Kernel::GV_DIMENSIONALITY, (settings.get(IteratorSettings::INCLUDE_CURVES)
+                ? (settings.get(IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES) ? -1. : 0.) : +1.));
+			if (settings.get(IteratorSettings::BUILDING_LOCAL_PLACEMENT)) {
+				if (settings.get(IteratorSettings::SITE_LOCAL_PLACEMENT)) {
+					Logger::Message(Logger::LOG_WARNING, "building-local-placement takes precedence over site-local-placement");
+				}
+				kernel.set_conversion_placement_rel_to(IfcSchema::Type::IfcBuilding);
+			} else if (settings.get(IteratorSettings::SITE_LOCAL_PLACEMENT)) {
+				kernel.set_conversion_placement_rel_to(IfcSchema::Type::IfcSite);
+			}
+		}
+
+		bool owns_ifc_file;
+	public:
+		Iterator(const IteratorSettings& settings, IfcParse::IfcFile* file)
+			: settings(settings)
+			, ifc_file(file)
+			, owns_ifc_file(false)
+		{
+			_initialize();
+		}
+		Iterator(const IteratorSettings& settings, const std::string& filename)
+			: settings(settings)
+			, ifc_file(new IfcParse::IfcFile)
+			, owns_ifc_file(true)
+		{
+			ifc_file->Init(filename);
+			_initialize();
+		}
+		Iterator(const IteratorSettings& settings, void* data, int length)
+			: settings(settings)
+			, ifc_file(new IfcParse::IfcFile)
+			, owns_ifc_file(true)
+		{
+			ifc_file->Init(data, length);
+			_initialize();
+		}
+		Iterator(const IteratorSettings& settings, std::istream& filestream, int length)
+			: settings(settings)
+			, ifc_file(new IfcParse::IfcFile)
+			, owns_ifc_file(true)
+		{
+			ifc_file->Init(filestream, length);
+			_initialize();
+		}
+
+		~Iterator() {
+			if (owns_ifc_file) {
+				delete ifc_file;
+			}
+
+			free_shapes();
+		}
+	};
+}
 
 #endif
