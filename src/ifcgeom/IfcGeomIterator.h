@@ -156,7 +156,7 @@ namespace IfcGeom {
             _initialize();
         }
 
-		bool initialize() {
+          bool initialize() {
 			try {
 				initUnits();
 			} catch (const std::exception& e) {

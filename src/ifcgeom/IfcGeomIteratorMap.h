@@ -96,6 +96,7 @@
 // prefix m_ for private data (member/private data and functions)
 // prefix t_ for function parameters
 // forget starting with _, possibilitiy for reserved compiler and stl implementations
+
 namespace IfcGeom {
 	
 template <typename P>
@@ -115,9 +116,9 @@ class IteratorMap {
   int m_total;
   std::string m_unit_name;
   double m_unit_magnitude;
-  gp_XYZ m_bounds_min_;
-  gp_XYZ m_bounds_max_;
-  std::vector<filter_t> filters_;
+  gp_XYZ m_bounds_min;
+  gp_XYZ m_bounds_max;
+  std::vector<filter_t> m_filters;
 
   struct filter_match
   {
@@ -135,6 +136,28 @@ class IteratorMap {
       unit_magnitude = length_unit.second;
     }
   }
+  void m_initialize() {
+    current_triangulation = 0;
+    current_shape_model = 0;
+    current_serialization = 0;
+
+    unit_name = "METER";
+    unit_magnitude = 1.f;
+
+    kernel.setValue(IfcGeom::Kernel::GV_MAX_FACES_TO_SEW, settings.get(IteratorSettings::SEW_SHELLS) ? 1000 : -1);
+    kernel.setValue(IfcGeom::Kernel::GV_DIMENSIONALITY, (settings.get(IteratorSettings::INCLUDE_CURVES)
+                                                         ? (settings.get(IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES) ? -1. : 0.) : +1.));
+    if (settings.get(IteratorSettings::BUILDING_LOCAL_PLACEMENT)) {
+      if (settings.get(IteratorSettings::SITE_LOCAL_PLACEMENT)) {
+        Logger::Message(Logger::LOG_WARNING, "building-local-placement takes precedence over site-local-placement");
+      }
+      kernel.set_conversion_placement_rel_to(IfcSchema::Type::IfcBuilding);
+    } else if (settings.get(IteratorSettings::SITE_LOCAL_PLACEMENT)) {
+      kernel.set_conversion_placement_rel_to(IfcSchema::Type::IfcSite);
+    }
+  }
+
+  bool owns_ifc_file;
 
  public:
   IteratorMap(
