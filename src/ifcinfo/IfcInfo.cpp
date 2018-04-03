@@ -145,6 +145,9 @@ int main(int ac, char** av)
   }
   //if (no_progress) { Logger::SetOutput(&std::cout, &log_stream); }
 
+    // for ( const auto &myPair : ifc_file.entities_by_type_t ) {
+    //     std::cout << myPair->first << "\n";
+    // }
 
   
   return 1;
