@@ -328,6 +328,8 @@ if not %ERRORLEVEL%==0 (
     if exist "%~dp0patches\%OCCT_HASH%_adm-cmake-occt_toolkit.cmake" copy /y "%~dp0patches\%OCCT_HASH%_adm-cmake-occt_toolkit.cmake" "%DEPENDENCY_DIR%\adm\cmake\occt_toolkit.cmake"
     REM Patch header file for HAVE_NO_DLL
     if exist "%~dp0patches\%OCCT_HASH%_Standard_Macro.hxx" copy /y "%~dp0patches\%OCCT_HASH%_Standard_Macro.hxx" "%DEPENDENCY_DIR%\src\Standard\Standard_Macro.hxx"
+    REM https://tracker.dev.opencascade.org/view.php?id=28248
+    if exist "%~dp0patches\%OCCT_HASH%_src-HLRBRep-HLRBRep_InternalAlgo.cxx" copy /y "%~dp0patches\%OCCT_HASH%_src-HLRBRep-HLRBRep_InternalAlgo.cxx" "%DEPENDENCY_DIR%\src\HLRBRep\HLRBRep_InternalAlgo.cxx"
     REM NOTE If adding a new patch, adjust the checks above and below accordingly
 )
 findstr IfcOpenShell "%DEPENDENCY_DIR%\CMakeLists.txt">NUL
@@ -430,7 +432,7 @@ set DEPENDENCY_NAME=SWIG %SWIG_VERSION%
 set DEPENDENCY_DIR=N/A
 set SWIG_ZIP=swigwin-%SWIG_VERSION%.zip
 cd "%DEPS_DIR%"
-call :DownloadFile http://sourceforge.net/projects/swig/files/swigwin/swigwin-%SWIG_VERSION%/%SWIG_ZIP% "%DEPS_DIR%" %SWIG_ZIP%
+call :DownloadFile https://sourceforge.net/projects/swig/files/swigwin/swigwin-%SWIG_VERSION%/%SWIG_ZIP% "%DEPS_DIR%" %SWIG_ZIP%
 IF NOT %ERRORLEVEL%==0 GOTO :Error
 call :ExtractArchive %SWIG_ZIP% "%DEPS_DIR%" "%DEPS_DIR%\swigwin"
 IF NOT %ERRORLEVEL%==0 GOTO :Error
@@ -486,7 +488,7 @@ exit /b %IFCOS_SCRIPT_RET%
 pushd "%2"
 if not exist "%~3". (
     call cecho.cmd 0 13 "Downloading %DEPENDENCY_NAME% into %~2."
-    powershell -Command "$webClient = new-object System.Net.WebClient; $webClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials; $webClient.DownloadFile('%1', '%3')"
+    powershell -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; $webClient = new-object System.Net.WebClient; $webClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials; $webClient.DownloadFile('%1', '%3')"
     REM Old wget version in case someone has problem with PowerShell: wget --no-check-certificate %1
 ) else (
     call cecho.cmd 0 13 "%DEPENDENCY_NAME% already downloaded. Skipping."

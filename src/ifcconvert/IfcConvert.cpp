@@ -113,7 +113,7 @@ bool rename_file(const std::string& old_filename, const std::string& new_filenam
 }
 
 static std::stringstream log_stream;
-void write_log();
+void write_log(bool);
 
 /// @todo make the filters non-global
 IfcGeom::entity_filter entity_filter; // Entity filter is used always by default.
@@ -152,58 +152,62 @@ bool init_input_file(const std::string& filename, IfcParse::IfcFile& ifc_file, b
 
 int main(int argc, char** argv)
 {
-  po::options_description generic_options("Command line options");
-  generic_options.add_options()
-      ("help,h", "display usage information")
-      ("version", "display version information")
-      ("verbose,v", "more verbose output")
-      ("yes,y", "answer 'yes' automatically to possible confirmation queries (e.g. overwriting an existing output file)")
-      ("no-progress", "Suppress possible progress bar type of prints that use carriage return.");
+        std::string log_format;
+    po::options_description generic_options("Command line options");
+        generic_options.add_options()
+                ("help,h", "display usage information")
+                ("version", "display version information")
+                ("verbose,v", "more verbose log messages")
+                ("quiet,q", "less status and progress output")
+                ("yes,y", "answer 'yes' automatically to possible confirmation queries (e.g. overwriting an existing output file)")
+                ("no-progress", "suppress possible progress bar type of prints that use carriage return")
+                ("log-format", po::value<std::string>(&log_format), "log format: plain or json");
 
-  po::options_description fileio_options;
-  fileio_options.add_options()
+    po::options_description fileio_options;
+        fileio_options.add_options()
+
 #ifdef USE_MMAP
       ("mmap", "use memory-mapped file for input")
 #endif
       ("input-file", po::value<std::string>(), "input IFC file")
       ("output-file", po::value<std::string>(), "output geometry file");
-		
+                
+    double deflection_tolerance;
+    inclusion_filter include_filter;
+    inclusion_traverse_filter include_traverse_filter;
+    exclusion_filter exclude_filter;
+    exclusion_traverse_filter exclude_traverse_filter;
+        std::string filter_filename;
 
-  double deflection_tolerance;
-  inclusion_filter include_filter;
-  inclusion_traverse_filter include_traverse_filter;
-  exclusion_filter exclude_filter;
-  exclusion_traverse_filter exclude_traverse_filter;
-  std::string filter_filename;
+    po::options_description geom_options("Geometry options");
+        geom_options.add_options()
+                ("plan",
+                        "Specifies whether to include curves in the output result. Typically "
+                        "these are representations of type Plan or Axis. Excluded by default.")
+                ("model",
+                        "Specifies whether to include surfaces and solids in the output result. "
+                        "Typically these are representations of type Body or Facetation. "
+                        "Included by default.")
+                ("weld-vertices",
+                        "Specifies whether vertices are welded, meaning that the coordinates "
+                        "vector will only contain unique xyz-triplets. This results in a "
+                        "manifold mesh which is useful for modelling applications, but might "
+                        "result in unwanted shading artefacts in rendering applications.")
+                ("use-world-coords", 
+                        "Specifies whether to apply the local placements of building elements "
+                        "directly to the coordinates of the representation mesh rather than "
+                        "to represent the local placement in the 4x3 matrix, which will in that "
+                        "case be the identity matrix.")
+                ("convert-back-units",
+                        "Specifies whether to convert back geometrical output back to the "
+                        "unit of measure in which it is defined in the IFC file. Default is "
+                        "to use meters.")
+                ("sew-shells", 
+                        "Specifies whether to sew the faces of IfcConnectedFaceSets together. "
+                        "This is a potentially time consuming operation, but guarantees a "
+                        "consistent orientation of surface normals, even if the faces are not "
+                        "properly oriented in the IFC file.")
 
-  po::options_description geom_options("Geometry options");
-  geom_options.add_options()
-      ("plan",
-       "Specifies whether to include curves in the output result. Typically "
-       "these are representations of type Plan or Axis. Excluded by default.")
-      ("model",
-       "Specifies whether to include surfaces and solids in the output result. "
-       "Typically these are representations of type Body or Facetation. "
-       "Included by default.")
-      ("weld-vertices",
-       "Specifies whether vertices are welded, meaning that the coordinates "
-       "vector will only contain unique xyz-triplets. This results in a "
-       "manifold mesh which is useful for modelling applications, but might "
-       "result in unwanted shading artefacts in rendering applications.")
-      ("use-world-coords", 
-       "Specifies whether to apply the local placements of building elements "
-       "directly to the coordinates of the representation mesh rather than "
-       "to represent the local placement in the 4x3 matrix, which will in that "
-       "case be the identity matrix.")
-      ("convert-back-units",
-       "Specifies whether to convert back geometrical output back to the "
-       "unit of measure in which it is defined in the IFC file. Default is "
-       "to use meters.")
-      ("sew-shells", 
-       "Specifies whether to sew the faces of IfcConnectedFaceSets together. "
-       "This is a potentially time consuming operation, but guarantees a "
-       "consistent orientation of surface normals, even if the faces are not "
-       "properly oriented in the IFC file.")
 #if OCC_VERSION_HEX < 0x60900
                       // In Open CASCADE version prior to 6.9.0 boolean operations with multiple
                       // arguments where not introduced yet and a work-around was implemented to
@@ -270,110 +274,117 @@ int main(int argc, char** argv)
        "Specifies the Unicode handling behavior when parsing the IFC file. "
        "Accepted values 'utf8' (the default) and 'escape'.")
 #endif
-      ("bounds", po::value<std::string>(&bounds),
-       "Specifies the bounding rectangle, for example 512x512, to which the "
-       "output will be scaled. Only used when converting to SVG.")
-      ("section-height", po::value<double>(&section_height),
-       "Specifies the cut section height for SVG 2D geometry.")
-      ("use-element-names",
-       "Use entity names instead of unique IDs for naming elements upon serialization. "
-       "Applicable for OBJ, DAE, and SVG output.")
-      ("use-element-guids",
-       "Use entity GUIDs instead of unique IDs for naming elements upon serialization. "
-       "Applicable for OBJ, DAE, and SVG output.")
-      ("use-material-names",
-       "Use material names instead of unique IDs for naming materials upon serialization. "
-       "Applicable for OBJ and DAE output.")
-      ("use-element-types",
-       "Use element types instead of unique IDs for naming elements upon serialization. "
-       "Applicable for DAE output.")
-      ("use-element-hierarchy",
-       "Order the elements using their IfcBuildingStorey parent. "
-       "Applicable for DAE output.")
-      ("center-model",
-       "Centers the elements upon serialization by applying the center point of "
-       "all placements as an offset. Applicable for OBJ and DAE output.")
-      ("model-offset", po::value<std::string>(&offset_str),
-       "Applies an arbitrary offset of form 'x;y;z' to all placements. Applicable for OBJ and DAE output.")
-      ("site-local-placement",
-       "Place elements locally in the IfcSite coordinate system, instead of placing "
-       "them in the IFC global coords. Applicable for OBJ and DAE output.")
-      ("building-local-placement",
-       "Similar to --site-local-placement, but placing elements in locally in the parent IfcBuilding coord system")
-      ("precision", po::value<short>(&precision)->default_value(SerializerSettings::DEFAULT_PRECISION),
-       "Sets the precision to be used to format floating-point values, 15 by default. "
-       "Use a negative value to use the system's default precision (should be 6 typically). "
-       "Applicable for OBJ and DAE output. For DAE output, value >= 15 means that up to 16 decimals are used, "
-       " and any other value means that 6 or 7 decimals are used.");
 
-  po::options_description cmdline_options;
-  cmdline_options.add(generic_options).add(fileio_options).add(geom_options).add(serializer_options);
+        ("bounds", po::value<std::string>(&bounds),
+            "Specifies the bounding rectangle, for example 512x512, to which the "
+            "output will be scaled. Only used when converting to SVG.")
+                ("section-height", po::value<double>(&section_height),
+                    "Specifies the cut section height for SVG 2D geometry.")
+        ("use-element-names",
+            "Use entity names instead of unique IDs for naming elements upon serialization. "
+            "Applicable for OBJ, DAE, and SVG output.")
+        ("use-element-guids",
+            "Use entity GUIDs instead of unique IDs for naming elements upon serialization. "
+            "Applicable for OBJ, DAE, and SVG output.")
+        ("use-material-names",
+            "Use material names instead of unique IDs for naming materials upon serialization. "
+            "Applicable for OBJ and DAE output.")
+                ("use-element-types",
+                        "Use element types instead of unique IDs for naming elements upon serialization. "
+                        "Applicable for DAE output.")
+                ("use-element-hierarchy",
+                        "Order the elements using their IfcBuildingStorey parent. "
+                        "Applicable for DAE output.")
+        ("center-model",
+            "Centers the elements upon serialization by applying the center point of "
+            "all placements as an offset. Applicable for OBJ and DAE output.")
+        ("model-offset", po::value<std::string>(&offset_str),
+            "Applies an arbitrary offset of form 'x;y;z' to all placements. Applicable for OBJ and DAE output.")
+                ("site-local-placement",
+                        "Place elements locally in the IfcSite coordinate system, instead of placing "
+                        "them in the IFC global coords. Applicable for OBJ and DAE output.")
+                ("building-local-placement",
+                        "Similar to --site-local-placement, but placing elements in locally in the parent IfcBuilding coord system")
+        ("precision", po::value<short>(&precision)->default_value(SerializerSettings::DEFAULT_PRECISION),
+            "Sets the precision to be used to format floating-point values, 15 by default. "
+            "Use a negative value to use the system's default precision (should be 6 typically). "
+            "Applicable for OBJ and DAE output. For DAE output, value >= 15 means that up to 16 decimals are used, "
+            " and any other value means that 6 or 7 decimals are used.");
 
-  po::positional_options_description positional_options;
-  positional_options.add("input-file", 1);
-  positional_options.add("output-file", 1);
+    po::options_description cmdline_options;
+        cmdline_options.add(generic_options).add(fileio_options).add(geom_options).add(serializer_options);
 
-  po::variables_map vmap;
-  try {
-    po::store(po::command_line_parser(argc, argv).
-              options(cmdline_options).positional(positional_options).run(), vmap);
-  } catch (const po::unknown_option& e) {
-    std::cerr << "[Error] Unknown option '" << e.get_option_name() << "'\n\n";
-    print_usage();
-    return EXIT_FAILURE;
-  } catch (const po::error_with_option_name& e) {
-    std::cerr << "[Error] Invalid usage of '" << e.get_option_name() << "': " << e.what() << "\n\n";
-    return EXIT_FAILURE;
-  } catch (const std::exception& e) {
-    std::cerr << "[Error] " << e.what() << "\n\n";
-    print_usage();
-    return EXIT_FAILURE;
-  } catch (...) {
-    std::cerr << "[Error] Unknown error parsing command line options\n\n";
-    print_usage();
-    return EXIT_FAILURE;
-  }
+    po::positional_options_description positional_options;
+        positional_options.add("input-file", 1);
+        positional_options.add("output-file", 1);
 
-  po::notify(vmap);
+    po::variables_map vmap;
+    try {
+        po::store(po::command_line_parser(argc, argv).
+            options(cmdline_options).positional(positional_options).run(), vmap);
+    } catch (const po::unknown_option& e) {
+        std::cerr << "[Error] Unknown option '" << e.get_option_name() << "'\n\n";
+        print_usage();
+        return EXIT_FAILURE;
+    } catch (const po::error_with_option_name& e) {
+        std::cerr << "[Error] Invalid usage of '" << e.get_option_name() << "': " << e.what() << "\n\n";
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << "[Error] " << e.what() << "\n\n";
+        print_usage();
+        return EXIT_FAILURE;
+    } catch (...) {
+                std::cerr << "[Error] Unknown error parsing command line options\n\n";
+        print_usage();
+        return EXIT_FAILURE;
+    }
 
-  print_version();
+    po::notify(vmap);
 
-  if (vmap.count("version")) {
-    return EXIT_SUCCESS;
-  } else if (vmap.count("help")) {
-    print_usage(false);
-    print_options(generic_options.add(geom_options).add(serializer_options));
-    return EXIT_SUCCESS;
-  } else if (!vmap.count("input-file")) {
-    std::cerr << "[Error] Input file not specified" << std::endl;
-    print_usage();
-    return EXIT_FAILURE;
-  }
-  const bool mmap = vmap.count("mmap") != 0;
-  const bool verbose = vmap.count("verbose") != 0;
-  const bool no_progress = vmap.count("no-progress") != 0;
-  const bool weld_vertices = vmap.count("weld-vertices") != 0;
-  const bool use_world_coords = vmap.count("use-world-coords") != 0;
-  const bool convert_back_units = vmap.count("convert-back-units") != 0;
-  const bool sew_shells = vmap.count("sew-shells") != 0;
+        const bool mmap = vmap.count("mmap") != 0;
+        const bool verbose = vmap.count("verbose") != 0;
+        const bool no_progress = vmap.count("no-progress") != 0;
+        const bool quiet = vmap.count("quiet") != 0;
+        const bool weld_vertices = vmap.count("weld-vertices") != 0;
+        const bool use_world_coords = vmap.count("use-world-coords") != 0;
+        const bool convert_back_units = vmap.count("convert-back-units") != 0;
+        const bool sew_shells = vmap.count("sew-shells") != 0;
+
 #if OCC_VERSION_HEX < 0x60900
   const bool merge_boolean_operands = vmap.count("merge-boolean-operands") != 0;
 #endif
-  const bool disable_opening_subtractions = vmap.count("disable-opening-subtractions") != 0;
-  const bool include_plan = vmap.count("plan") != 0;
-  const bool include_model = vmap.count("model") != 0 || (!include_plan);
-  const bool enable_layerset_slicing = vmap.count("enable-layerset-slicing") != 0;
-  const bool use_element_names = vmap.count("use-element-names") != 0;
-  const bool use_element_guids = vmap.count("use-element-guids") != 0 ;
-  const bool use_material_names = vmap.count("use-material-names") != 0;
-  const bool use_element_types = vmap.count("use-element-types") != 0;
-  const bool use_element_hierarchy = vmap.count("use-element-hierarchy") != 0;
-  const bool no_normals = vmap.count("no-normals") != 0 ;
-  const bool center_model = vmap.count("center-model") != 0 ;
-  const bool model_offset = vmap.count("model-offset") != 0 ;
-  const bool site_local_placement = vmap.count("site-local-placement") != 0 ;
-  const bool building_local_placement = vmap.count("building-local-placement") != 0 ;
-  const bool generate_uvs = vmap.count("generate-uvs") != 0 ;
+        const bool disable_opening_subtractions = vmap.count("disable-opening-subtractions") != 0;
+        const bool include_plan = vmap.count("plan") != 0;
+        const bool include_model = vmap.count("model") != 0 || (!include_plan);
+        const bool enable_layerset_slicing = vmap.count("enable-layerset-slicing") != 0;
+        const bool use_element_names = vmap.count("use-element-names") != 0;
+        const bool use_element_guids = vmap.count("use-element-guids") != 0;
+        const bool use_material_names = vmap.count("use-material-names") != 0;
+        const bool use_element_types = vmap.count("use-element-types") != 0;
+        const bool use_element_hierarchy = vmap.count("use-element-hierarchy") != 0;
+        const bool no_normals = vmap.count("no-normals") != 0;
+        const bool center_model = vmap.count("center-model") != 0;
+        const bool model_offset = vmap.count("model-offset") != 0;
+        const bool site_local_placement = vmap.count("site-local-placement") != 0;
+        const bool building_local_placement = vmap.count("building-local-placement") != 0;
+        const bool generate_uvs = vmap.count("generate-uvs") != 0;
+
+        if (!quiet || vmap.count("version")) {
+                print_version();
+        }
+
+    if (vmap.count("version")) {
+        return EXIT_SUCCESS;
+    } else if (vmap.count("help")) {
+        print_usage(false);
+        print_options(generic_options.add(geom_options).add(serializer_options));
+        return EXIT_SUCCESS;
+    } else if (!vmap.count("input-file")) {
+        std::cerr << "[Error] Input file not specified" << std::endl;
+        print_usage();
+        return EXIT_FAILURE;
+    }
+
 
 #ifdef HAVE_ICU
   if (!unicode_mode.empty()) {
@@ -414,7 +425,7 @@ int main(int argc, char** argv)
   const std::string output_filename = vmap.count("output-file") == 1 
                                       ? vmap["output-file"].as<std::string>()
                                       : change_extension(input_filename, DEFAULT_EXTENSION);
-	
+        
   if (output_filename.size() < 5) {
     std::cerr << "[Error] Invalid or unsupported output file '" << output_filename << "' given" << std::endl;
     print_usage();
@@ -438,22 +449,49 @@ int main(int argc, char** argv)
   Logger::SetOutput(&std::cout, &log_stream);
   Logger::Verbosity(verbose ? Logger::LOG_NOTICE : Logger::LOG_ERROR);
 
-  IfcParse::IfcFile ifc_file;
+        if (vmap.count("log-format") == 1) {
+                boost::to_lower(log_format);
+                if (log_format == "plain") {
+                        Logger::OutputFormat(Logger::FMT_PLAIN);
+                } else if (log_format == "json") {
+                        Logger::OutputFormat(Logger::FMT_JSON);
+                } else {
+                        std::cerr << "[Error] --log-format should be either plain or json" << std::endl;
+                        print_usage();
+                        return EXIT_FAILURE;
+                }
+        }
 
-  if (output_extension == ".xml") {
-    int exit_code = EXIT_FAILURE;
-    try {
-      if (init_input_file(input_filename, ifc_file, no_progress, mmap)) {
-        XmlSerializer s(output_temp_filename);
-        s.setFile(&ifc_file);
-        Logger::Status("Writing XML output...");
-        s.finalize();
-        Logger::Status("Done!");
-        rename_file(output_temp_filename, output_filename);
-        exit_code = EXIT_SUCCESS;
-      }
-    } catch (const std::exception& e) {
-      Logger::Error(e);
+    IfcParse::IfcFile ifc_file;
+
+    if (output_extension == ".xml") {
+        int exit_code = EXIT_FAILURE;
+        try {
+            if (init_input_file(input_filename, ifc_file, no_progress || quiet, mmap)) {
+                XmlSerializer s(output_temp_filename);
+                s.setFile(&ifc_file);
+                Logger::Status("Writing XML output...");
+                s.finalize();
+                Logger::Status("Done!");
+                rename_file(output_temp_filename, output_filename);
+                exit_code = EXIT_SUCCESS;
+            }
+        } catch (const std::exception& e) {
+                        Logger::Error(e);
+                }
+        write_log(!quiet);
+        return exit_code;
+    }
+
+    if (!filter_filename.empty()) {
+        size_t num_filters = read_filters_from_file(filter_filename, include_filter, include_traverse_filter, exclude_filter, exclude_traverse_filter);
+        if (num_filters) {
+            Logger::Notice(boost::lexical_cast<std::string>(num_filters) + " filters read from '" + filter_filename + "'.");
+        } else {
+            std::cerr << "[Error] No filters read from '" + filter_filename + "'.\n";
+            return EXIT_FAILURE;
+        }
+
     }
     write_log();
     return exit_code;
@@ -531,97 +569,68 @@ int main(int argc, char** argv)
   } else if (output_extension == ".dae") {
     serializer = new ColladaSerializer(output_temp_filename, settings);
 #endif
-  } else if (output_extension == ".stp") {
-    serializer = new StepSerializer(output_temp_filename, settings);
-  } else if (output_extension == ".igs") {
-    IGESControl_Controller::Init(); // work around Open Cascade bug
-    serializer = new IgesSerializer(output_temp_filename, settings);
-  } else if (output_extension == ".svg") {
+        } else if (output_extension == ".stp") {
+                serializer = new StepSerializer(output_temp_filename, settings);
+        } else if (output_extension == ".igs") {
+                IGESControl_Controller::Init(); // work around Open Cascade bug
+                serializer = new IgesSerializer(output_temp_filename, settings);
+        } else if (output_extension == ".svg") {
+                settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
+                serializer = new SvgSerializer(output_temp_filename, settings);
+                if (vmap.count("section-height") != 0) {
+                        Logger::Notice("Overriding section height");
+                        static_cast<SvgSerializer*>(serializer)->setSectionHeight(section_height);
+                }
+                if (bounding_width.is_initialized() && bounding_height.is_initialized()) {
+            static_cast<SvgSerializer*>(serializer)->setBoundingRectangle(bounding_width.get(), bounding_height.get());
+                }
+        } else {
+        std::cerr << "[Error] Unknown output filename extension '" + output_extension + "'\n";
+                write_log(!quiet);
+                print_usage();
+                return EXIT_FAILURE;
+        }
+
+    // NOTE After this point, make sure to delete serializer upon application exit.
+
+    if (use_element_hierarchy && output_extension != ".dae") {
+        std::cerr << "[Error] --use-element-hierarchy can be used only with .dae output.\n";
+                write_log(!quiet);
+                print_usage();
+        delete serializer;
+        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+                return EXIT_FAILURE;
+        }
+
+    const bool is_tesselated = serializer->isTesselated(); // isTesselated() doesn't change at run-time
+        if (!is_tesselated) {
+                if (weld_vertices) {
+            Logger::Notice("Weld vertices setting ignored when writing non-tesselated output");
+                }
+        if (generate_uvs) {
+            Logger::Notice("Generate UVs setting ignored when writing non-tesselated output");
+        }
+        if (center_model || model_offset) {
+            Logger::Notice("Centering/offsetting model setting ignored when writing non-tesselated output");
+        }
+
+
     settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
-    serializer = new SvgSerializer(output_temp_filename, settings);
-    if (vmap.count("section-height") != 0) {
-      Logger::Notice("Overriding section height");
-      static_cast<SvgSerializer*>(serializer)->setSectionHeight(section_height);
-    }
-    if (bounding_width.is_initialized() && bounding_height.is_initialized()) {
-      static_cast<SvgSerializer*>(serializer)->setBoundingRectangle(bounding_width.get(), bounding_height.get());
-    }
-  } else {
-    std::cerr << "[Error] Unknown output filename extension '" + output_extension + "'\n";
-    write_log();
-    print_usage();
-    return EXIT_FAILURE;
   }
 
-  // NOTE After this point, make sure to delete serializer upon application exit.
+        if (!serializer->ready()) {
+        delete serializer;
+        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+                write_log(!quiet);
+                return EXIT_FAILURE;
+        }
 
-  if (use_element_hierarchy && output_extension != ".dae") {
-    std::cerr << "[Error] --use-element-hierarchy can be used only with .dae output.\n";
-    write_log();
-    print_usage();
-    delete serializer;
-    std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-    return EXIT_FAILURE;
-  }
-
-  const bool is_tesselated = serializer->isTesselated(); // isTesselated() doesn't change at run-time
-  if (!is_tesselated) {
-    if (weld_vertices) {
-      Logger::Notice("Weld vertices setting ignored when writing non-tesselated output");
-    }
-    if (generate_uvs) {
-      Logger::Notice("Generate UVs setting ignored when writing non-tesselated output");
-    }
-    if (center_model || model_offset) {
-      Logger::Notice("Centering/offsetting model setting ignored when writing non-tesselated output");
-    }
-
-    settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
-  }
-
-  if (!serializer->ready()) {
-    delete serializer;
-    std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-    write_log();
-    return EXIT_FAILURE;
-  }
 
   time_t start,end;
   time(&start);
-	
-  if (!init_input_file(input_filename, ifc_file, no_progress, mmap)) {
-    return EXIT_FAILURE;
-  }
+        
+    if (!init_input_file(input_filename, ifc_file, no_progress || quiet, mmap)) {
 
-  IfcGeom::Iterator<real_t> context_iterator(settings, &ifc_file, filter_funcs);
-  if (!context_iterator.initialize()) {
-    /// @todo It would be nice to know and print separate error prints for a case where we found no entities
-    /// and for a case we found no entities that satisfy our filtering criteria.
-    Logger::Error("No geometrical entities found");
-    delete serializer;
-    std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-    write_log();
-    return EXIT_FAILURE;
-  }
-
-  serializer->setFile(context_iterator.getFile());
-
-  if (convert_back_units) {
-    serializer->setUnitNameAndMagnitude(context_iterator.getUnitName(), static_cast<float>(context_iterator.getUnitMagnitude()));
-  } else {
-    serializer->setUnitNameAndMagnitude("METER", 1.0f);
-  }
-
-  serializer->writeHeader();
-
-  int old_progress = -1;
-
-  if (center_model || model_offset) {
-    double* offset = serializer->settings().offset;
-    if (center_model) {
-      if (site_local_placement || building_local_placement) {
-        Logger::Error("Cannot use --center-model together with --{site,building}-local-placement");
-        delete serializer;
         return EXIT_FAILURE;
       }
       gp_XYZ center = (context_iterator.bounds_min() + context_iterator.bounds_max()) * 0.5;
@@ -633,32 +642,102 @@ int main(int argc, char** argv)
         std::cerr << "[Error] Invalid use of --model-offset\n";
         delete serializer;
         std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-        print_options(serializer_options);
+        write_log(!quiet);
+
         return EXIT_FAILURE;
       }
     }
 
-    std::stringstream msg;
-    msg << "Using model offset (" << offset[0] << "," << offset[1] << "," << offset[2] << ")";
-    Logger::Notice(msg.str());
-  }
+    serializer->setFile(context_iterator.getFile());
 
-  Logger::Status("Creating geometry...");
+        if (convert_back_units) {
+                serializer->setUnitNameAndMagnitude(context_iterator.getUnitName(), static_cast<float>(context_iterator.getUnitMagnitude()));
+        } else {
+                serializer->setUnitNameAndMagnitude("METER", 1.0f);
+        }
 
-  // The functions IfcGeom::Iterator::get() and IfcGeom::Iterator::next() 
-  // wrap an iterator of all geometrical products in the Ifc file. 
-  // IfcGeom::Iterator::get() returns an IfcGeom::TriangulationElement or 
-  // -BRepElement pointer, based on current settings. (see IfcGeomIterator.h 
-  // for definition) IfcGeom::Iterator::next() is used to poll whether more 
-  // geometrical entities are available. None of these functions throw 
-  // exceptions, neither for parsing errors or geometrical errors. Upon 
-  // calling next() the entity to be returned has already been processed, a 
-  // non-null return value guarantees that a successfully processed product is 
-  // available. 
-  size_t num_created = 0;
-	
-  do {
-    IfcGeom::Element<real_t> *geom_object = context_iterator.get();
+        serializer->writeHeader();
+
+        int old_progress = quiet ? 0 : -1;
+
+    if (center_model || model_offset) {
+        double* offset = serializer->settings().offset;
+        if (center_model) {
+                        if (site_local_placement || building_local_placement) {
+                                Logger::Error("Cannot use --center-model together with --{site,building}-local-placement");
+                                delete serializer;
+                                return EXIT_FAILURE;
+                        }
+            gp_XYZ center = (context_iterator.bounds_min() + context_iterator.bounds_max()) * 0.5;
+            offset[0] = -center.X();
+            offset[1] = -center.Y();
+            offset[2] = -center.Z();
+        } else {
+            if (sscanf(offset_str.c_str(), "%lf;%lf;%lf", &offset[0], &offset[1], &offset[2]) != 3) {
+                std::cerr << "[Error] Invalid use of --model-offset\n";
+                delete serializer;
+                std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+                print_options(serializer_options);
+                return EXIT_FAILURE;
+            }
+        }
+
+        std::stringstream msg;
+        msg << "Using model offset (" << offset[0] << "," << offset[1] << "," << offset[2] << ")";
+        Logger::Notice(msg.str());
+    }
+
+        if (!quiet) {
+                Logger::Status("Creating geometry...");
+        }
+
+        // The functions IfcGeom::Iterator::get() and IfcGeom::Iterator::next() 
+        // wrap an iterator of all geometrical products in the Ifc file. 
+        // IfcGeom::Iterator::get() returns an IfcGeom::TriangulationElement or 
+        // -BRepElement pointer, based on current settings. (see IfcGeomIterator.h 
+        // for definition) IfcGeom::Iterator::next() is used to poll whether more 
+        // geometrical entities are available. None of these functions throw 
+        // exceptions, neither for parsing errors or geometrical errors. Upon 
+        // calling next() the entity to be returned has already been processed, a 
+        // non-null return value guarantees that a successfully processed product is 
+        // available. 
+        size_t num_created = 0;
+        
+        do {
+        IfcGeom::Element<real_t> *geom_object = context_iterator.get();
+
+                if (is_tesselated)
+                {
+                        serializer->write(static_cast<const IfcGeom::TriangulationElement<real_t>*>(geom_object));
+                }
+                else
+                {
+                        serializer->write(static_cast<const IfcGeom::BRepElement<real_t>*>(geom_object));
+                }
+
+        if (!no_progress) {
+                        if (quiet) {
+                                const int progress = context_iterator.progress();
+                                for (; old_progress < progress; ++old_progress) {
+                                        std::cout << ".";
+                                }
+                                std::cout << std::flush;
+                        } else {
+                                const int progress = context_iterator.progress() / 2;
+                                if (old_progress != progress) Logger::ProgressBar(progress);
+                                old_progress = progress;
+                        }
+        }
+    } while (++num_created, context_iterator.next());
+
+        if (!no_progress && quiet) {
+                for (; old_progress < 100; ++old_progress) {
+                        std::cout << ".";
+                }
+        } else {
+                Logger::Status("\rDone creating geometry (" + boost::lexical_cast<std::string>(num_created) +
+                        " objects)                                ");
+        }
 
     if (is_tesselated)
     {
@@ -669,56 +748,40 @@ int main(int argc, char** argv)
       serializer->write(static_cast<const IfcGeom::BRepElement<real_t>*>(geom_object));
     }
 
-    if (!no_progress) {
-      const int progress = context_iterator.progress() / 2;
-      if (old_progress != progress) Logger::ProgressBar(progress);
-      old_progress = progress;
-    }
-  } while (++num_created, context_iterator.next());
+        write_log(!quiet);
 
-  Logger::Status("\rDone creating geometry (" + boost::lexical_cast<std::string>(num_created) +
-                 " objects)                                ");
+        time(&end);
 
-  serializer->finalize();
-  delete serializer;
+        if (!quiet) {
+                int seconds = (int)difftime(end, start);
+                std::stringstream msg;
+                int minutes = seconds / 60;
+                seconds = seconds % 60;
+                msg << "\nConversion took";
+                if (minutes > 0) {
+                        msg << " " << minutes << " minute";
+                        if (minutes > 1) {
+                                msg << "s";
+                        }
+                }
+                msg << " " << seconds << " second";
+                if (seconds > 1) {
+                        msg << "s";
+                }
+                Logger::Status(msg.str());
+        }
 
-  // Renaming might fail (e.g. maybe the existing file was open in a viewer application)
-  // Do not remove the temp file as user can salvage the conversion result from it.
-  bool successful = rename_file(output_temp_filename, output_filename);
-  if (!successful) {
-    Logger::Error("Unable to write output file '" + output_filename + "', see '" +
-                  output_temp_filename + "' for the conversion result.");
-  }
-
-  write_log();
-
-  time(&end);
-
-  int seconds = (int)difftime(end, start);
-  std::stringstream msg;
-  int minutes = seconds / 60;
-  seconds = seconds % 60;
-  msg << "\nConversion took";
-  if (minutes > 0) {
-    msg << " " << minutes << " minute";
-    if (minutes > 1) {
-      msg << "s";
-    }
-  }
-  msg << " " << seconds << " second";
-  if (seconds > 1) {
-    msg << "s";
-  }
-  Logger::Status(msg.str());
-
-  return successful ? EXIT_SUCCESS : EXIT_FAILURE;
+    return successful ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-void write_log() {
-  std::string log = log_stream.str();
-  if (!log.empty()) {
-    std::cout << "\nLog:\n" << log << std::endl;
-  }
+void write_log(bool header) {
+        std::string log = log_stream.str();
+        if (!log.empty()) {
+                if (header) {
+                        std::cout << "\nLog:\n";
+                }
+                std::cout << log << std::endl;
+        }
 }
 
 bool init_input_file(const std::string &filename, IfcParse::IfcFile &ifc_file, bool no_progress, bool mmap)
@@ -872,37 +935,39 @@ bool init_input_file(const std::string &filename, IfcParse::IfcFile &ifc_file, b
   std::vector<IfcGeom::filter_t> setup_filters(const std::vector<geom_filter>& filters, const std::string& output_extension)
   {
     std::vector<IfcGeom::filter_t> filter_funcs;
-    foreach(const geom_filter& f, filters) {
-      if (f.type == geom_filter::ENTITY_TYPE) {
-        entity_filter.include = f.include;
-        entity_filter.traverse = f.traverse;
-        try {
-          entity_filter.populate(f.values);
-        } catch (const IfcParse::IfcException& e) {
-          std::cerr << "[Error] " << e.what() << std::endl;
-          return std::vector<IfcGeom::filter_t>();
-        }
-      } else if (f.type == geom_filter::LAYER_NAME) {
-        layer_filter.include = f.include;
-        layer_filter.traverse = f.traverse;
-        layer_filter.populate(f.values);
-      } else if (f.type == geom_filter::ENTITY_ARG) {
-        if (f.arg == GUID_ARG) {
-          guid_filter.include = f.include;
-          guid_filter.traverse = f.traverse;
-          guid_filter.populate(f.values);
-        } else if (f.arg == NAME_ARG) {
-          name_filter.include = f.include;
-          name_filter.traverse = f.traverse;
-          name_filter.populate(f.values);
-        } else if (f.arg == DESC_ARG) {
-          desc_filter.include = f.include;
-          desc_filter.traverse = f.traverse;
-          desc_filter.populate(f.values);
-        } else if (f.arg == TAG_ARG) {
-          tag_filter.include = f.include;
-          tag_filter.traverse = f.traverse;
-          tag_filter.populate(f.values);
+    BOOST_FOREACH(const geom_filter& f, filters) {
+        if (f.type == geom_filter::ENTITY_TYPE) {
+            entity_filter.include = f.include;
+            entity_filter.traverse = f.traverse;
+            try {
+                entity_filter.populate(f.values);
+            } catch (const IfcParse::IfcException& e) {
+                std::cerr << "[Error] " << e.what() << std::endl;
+                return std::vector<IfcGeom::filter_t>();
+            }
+        } else if (f.type == geom_filter::LAYER_NAME) {
+            layer_filter.include = f.include;
+            layer_filter.traverse = f.traverse;
+            layer_filter.populate(f.values);
+        } else if (f.type == geom_filter::ENTITY_ARG) {
+            if (f.arg == GUID_ARG) {
+                guid_filter.include = f.include;
+                guid_filter.traverse = f.traverse;
+                guid_filter.populate(f.values);
+            } else if (f.arg == NAME_ARG) {
+                name_filter.include = f.include;
+                name_filter.traverse = f.traverse;
+                name_filter.populate(f.values);
+            } else if (f.arg == DESC_ARG) {
+                desc_filter.include = f.include;
+                desc_filter.traverse = f.traverse;
+                desc_filter.populate(f.values);
+            } else if (f.arg == TAG_ARG) {
+                tag_filter.include = f.include;
+                tag_filter.traverse = f.traverse;
+                tag_filter.populate(f.values);
+            }
+
         }
       }
     }
