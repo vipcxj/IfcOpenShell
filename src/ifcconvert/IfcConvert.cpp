@@ -511,108 +511,107 @@ int main(int argc, char** argv)
     if (!desc_filter.values.empty()) { desc_filter.update_description(); Logger::Notice(desc_filter.description); }
     if (!tag_filter.values.empty()) { tag_filter.update_description(); Logger::Notice(tag_filter.description); }
 
-	SerializerSettings settings;
-	/// @todo Make APPLY_DEFAULT_MATERIALS configurable? Quickly tested setting this to false and using obj exporter caused the program to crash and burn.
-	settings.set(IfcGeom::IteratorSettings::APPLY_DEFAULT_MATERIALS,      true);
-	settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS,             use_world_coords);
-	settings.set(IfcGeom::IteratorSettings::WELD_VERTICES,                weld_vertices);
-	settings.set(IfcGeom::IteratorSettings::SEW_SHELLS,                   sew_shells);
-	settings.set(IfcGeom::IteratorSettings::CONVERT_BACK_UNITS,           convert_back_units);
+    SerializerSettings settings;
+    /// @todo Make APPLY_DEFAULT_MATERIALS configurable? Quickly tested setting this to false and using obj exporter caused the program to crash and burn.
+    settings.set(IfcGeom::IteratorSettings::APPLY_DEFAULT_MATERIALS,      true);
+    settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS,             use_world_coords);
+    settings.set(IfcGeom::IteratorSettings::WELD_VERTICES,                weld_vertices);
+    settings.set(IfcGeom::IteratorSettings::SEW_SHELLS,                   sew_shells);
+    settings.set(IfcGeom::IteratorSettings::CONVERT_BACK_UNITS,           convert_back_units);
 #if OCC_VERSION_HEX < 0x60900
-	settings.set(IfcGeom::IteratorSettings::FASTER_BOOLEANS,              merge_boolean_operands);
+    settings.set(IfcGeom::IteratorSettings::FASTER_BOOLEANS,              merge_boolean_operands);
 #endif
-	settings.set(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS, disable_opening_subtractions);
-	settings.set(IfcGeom::IteratorSettings::INCLUDE_CURVES,               include_plan);
-	settings.set(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES,  !include_model);
-	settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS,              enable_layerset_slicing);
+    settings.set(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS, disable_opening_subtractions);
+    settings.set(IfcGeom::IteratorSettings::INCLUDE_CURVES,               include_plan);
+    settings.set(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES,  !include_model);
+    settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS,              enable_layerset_slicing);
     settings.set(IfcGeom::IteratorSettings::NO_NORMALS, no_normals);
     settings.set(IfcGeom::IteratorSettings::GENERATE_UVS, generate_uvs);
-	settings.set(IfcGeom::IteratorSettings::SEARCH_FLOOR, use_element_hierarchy);
-	settings.set(IfcGeom::IteratorSettings::SITE_LOCAL_PLACEMENT, site_local_placement);
-	settings.set(IfcGeom::IteratorSettings::BUILDING_LOCAL_PLACEMENT, building_local_placement);
-
+    settings.set(IfcGeom::IteratorSettings::SEARCH_FLOOR, use_element_hierarchy);
+    settings.set(IfcGeom::IteratorSettings::SITE_LOCAL_PLACEMENT, site_local_placement);
+    settings.set(IfcGeom::IteratorSettings::BUILDING_LOCAL_PLACEMENT, building_local_placement);
 
     settings.set(SerializerSettings::USE_ELEMENT_NAMES, use_element_names);
     settings.set(SerializerSettings::USE_ELEMENT_GUIDS, use_element_guids);
     settings.set(SerializerSettings::USE_MATERIAL_NAMES, use_material_names);
-	settings.set(SerializerSettings::USE_ELEMENT_TYPES, use_element_types);
-	settings.set(SerializerSettings::USE_ELEMENT_HIERARCHY, use_element_hierarchy);
+    settings.set(SerializerSettings::USE_ELEMENT_TYPES, use_element_types);
+    settings.set(SerializerSettings::USE_ELEMENT_HIERARCHY, use_element_hierarchy);
     settings.set_deflection_tolerance(deflection_tolerance);
     settings.precision = precision;
-
-	GeometrySerializer* serializer;
-	if (output_extension == ".obj") {
-        // Do not use temp file for MTL as it's such a small file.
-        const std::string mtl_filename = change_extension(output_filename, "mtl");
-		if (!use_world_coords) {
-			Logger::Notice("Using world coords when writing WaveFront OBJ files");
-			settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS, true);
-		}
-		serializer = new WaveFrontOBJSerializer(output_temp_filename, mtl_filename, settings);
+    
+    GeometrySerializer* serializer;
+    if (output_extension == ".obj") {
+      // Do not use temp file for MTL as it's such a small file.
+      const std::string mtl_filename = change_extension(output_filename, "mtl");
+      if (!use_world_coords) {
+        Logger::Notice("Using world coords when writing WaveFront OBJ files");
+        settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS, true);
+      }
+      serializer = new WaveFrontOBJSerializer(output_temp_filename, mtl_filename, settings);
 #ifdef WITH_OPENCOLLADA
-	} else if (output_extension == ".dae") {
-		serializer = new ColladaSerializer(output_temp_filename, settings);
+    } else if (output_extension == ".dae") {
+      serializer = new ColladaSerializer(output_temp_filename, settings);
 #endif
-	} else if (output_extension == ".stp") {
-		serializer = new StepSerializer(output_temp_filename, settings);
-	} else if (output_extension == ".igs") {
-		IGESControl_Controller::Init(); // work around Open Cascade bug
-		serializer = new IgesSerializer(output_temp_filename, settings);
-	} else if (output_extension == ".svg") {
-		settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
-		serializer = new SvgSerializer(output_temp_filename, settings);
-		if (vmap.count("section-height") != 0) {
-			Logger::Notice("Overriding section height");
-			static_cast<SvgSerializer*>(serializer)->setSectionHeight(section_height);
-		}
-		if (bounding_width.is_initialized() && bounding_height.is_initialized()) {
-            static_cast<SvgSerializer*>(serializer)->setBoundingRectangle(bounding_width.get(), bounding_height.get());
-		}
-	} else {
-        std::cerr << "[Error] Unknown output filename extension '" + output_extension + "'\n";
-		write_log(!quiet);
-		print_usage();
-		return EXIT_FAILURE;
-	}
+    } else if (output_extension == ".stp") {
+      serializer = new StepSerializer(output_temp_filename, settings);
+    } else if (output_extension == ".igs") {
+      IGESControl_Controller::Init(); // work around Open Cascade bug
+      serializer = new IgesSerializer(output_temp_filename, settings);
+    } else if (output_extension == ".svg") {
+      settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
+      serializer = new SvgSerializer(output_temp_filename, settings);
+      if (vmap.count("section-height") != 0) {
+        Logger::Notice("Overriding section height");
+        static_cast<SvgSerializer*>(serializer)->setSectionHeight(section_height);
+      }
+      if (bounding_width.is_initialized() && bounding_height.is_initialized()) {
+        static_cast<SvgSerializer*>(serializer)->setBoundingRectangle(bounding_width.get(), bounding_height.get());
+      }
+    } else {
+      std::cerr << "[Error] Unknown output filename extension '" + output_extension + "'\n";
+      write_log(!quiet);
+      print_usage();
+      return EXIT_FAILURE;
+    }
 
     // NOTE After this point, make sure to delete serializer upon application exit.
 
     if (use_element_hierarchy && output_extension != ".dae") {
-        std::cerr << "[Error] --use-element-hierarchy can be used only with .dae output.\n";
-		write_log(!quiet);
-		print_usage();
-        delete serializer;
-        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-		return EXIT_FAILURE;
-	}
+      std::cerr << "[Error] --use-element-hierarchy can be used only with .dae output.\n";
+      write_log(!quiet);
+      print_usage();
+      delete serializer;
+      std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+      return EXIT_FAILURE;
+    }
 
     const bool is_tesselated = serializer->isTesselated(); // isTesselated() doesn't change at run-time
-	if (!is_tesselated) {
-		if (weld_vertices) {
-            Logger::Notice("Weld vertices setting ignored when writing non-tesselated output");
-		}
-        if (generate_uvs) {
-            Logger::Notice("Generate UVs setting ignored when writing non-tesselated output");
-        }
-        if (center_model || model_offset) {
-            Logger::Notice("Centering/offsetting model setting ignored when writing non-tesselated output");
-        }
+    if (!is_tesselated) {
+      if (weld_vertices) {
+        Logger::Notice("Weld vertices setting ignored when writing non-tesselated output");
+      }
+      if (generate_uvs) {
+        Logger::Notice("Generate UVs setting ignored when writing non-tesselated output");
+      }
+      if (center_model || model_offset) {
+        Logger::Notice("Centering/offsetting model setting ignored when writing non-tesselated output");
+      }
 
-        settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
-	}
+      settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
+    }
 
-	if (!serializer->ready()) {
-        delete serializer;
-        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-		write_log(!quiet);
-		return EXIT_FAILURE;
-	}
+    if (!serializer->ready()) {
+      delete serializer;
+      std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+      write_log(!quiet);
+      return EXIT_FAILURE;
+    }
 
-	time_t start,end;
-	time(&start);
+    time_t start,end;
+    time(&start);
 	
     if (!init_input_file(input_filename, ifc_file, no_progress || quiet, mmap)) {
-        return EXIT_FAILURE;
+      return EXIT_FAILURE;
     }
 
     IfcGeom::Iterator<real_t> context_iterator(settings, &ifc_file, filter_funcs);
@@ -628,111 +627,111 @@ int main(int argc, char** argv)
 
     serializer->setFile(context_iterator.getFile());
 
-	if (convert_back_units) {
-		serializer->setUnitNameAndMagnitude(context_iterator.getUnitName(), static_cast<float>(context_iterator.getUnitMagnitude()));
-	} else {
-		serializer->setUnitNameAndMagnitude("METER", 1.0f);
-	}
-
-	serializer->writeHeader();
-
-	int old_progress = quiet ? 0 : -1;
-
-    if (is_tesselated && (center_model || model_offset)) {
-        double* offset = serializer->settings().offset;
-        if (center_model) {
-			if (site_local_placement || building_local_placement) {
-				Logger::Error("Cannot use --center-model together with --{site,building}-local-placement");
-				delete serializer;
-				return EXIT_FAILURE;
-			}
-
-            if (!quiet) Logger::Status("Computing bounds...");
-            context_iterator.compute_bounds();
-            if (!quiet) Logger::Status("Done!");
-
-            gp_XYZ center = (context_iterator.bounds_min() + context_iterator.bounds_max()) * 0.5;
-            offset[0] = -center.X();
-            offset[1] = -center.Y();
-            offset[2] = -center.Z();
-        } else {
-            if (sscanf(offset_str.c_str(), "%lf;%lf;%lf", &offset[0], &offset[1], &offset[2]) != 3) {
-                std::cerr << "[Error] Invalid use of --model-offset\n";
-                delete serializer;
-                std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-                print_options(serializer_options);
-                return EXIT_FAILURE;
-            }
-        }
-
-        std::stringstream msg;
-        msg << "Using model offset (" << offset[0] << "," << offset[1] << "," << offset[2] << ")";
-        Logger::Notice(msg.str());
+    if (convert_back_units) {
+      serializer->setUnitNameAndMagnitude(context_iterator.getUnitName(), static_cast<float>(context_iterator.getUnitMagnitude()));
+    } else {
+      serializer->setUnitNameAndMagnitude("METER", 1.0f);
     }
 
-	if (!quiet) {
-		Logger::Status("Creating geometry...");
-	}
+    serializer->writeHeader();
 
-	// The functions IfcGeom::Iterator::get() and IfcGeom::Iterator::next() 
-	// wrap an iterator of all geometrical products in the Ifc file. 
-	// IfcGeom::Iterator::get() returns an IfcGeom::TriangulationElement or 
-	// -BRepElement pointer, based on current settings. (see IfcGeomIterator.h 
-	// for definition) IfcGeom::Iterator::next() is used to poll whether more 
-	// geometrical entities are available. None of these functions throw 
-	// exceptions, neither for parsing errors or geometrical errors. Upon 
-	// calling next() the entity to be returned has already been processed, a 
-	// non-null return value guarantees that a successfully processed product is 
-	// available. 
-	size_t num_created = 0;
-	
-	do {
-        IfcGeom::Element<real_t> *geom_object = context_iterator.get();
+    int old_progress = quiet ? 0 : -1;
 
-		if (is_tesselated)
-		{
-			serializer->write(static_cast<const IfcGeom::TriangulationElement<real_t>*>(geom_object));
-		}
-		else
-		{
-			serializer->write(static_cast<const IfcGeom::BRepElement<real_t>*>(geom_object));
-		}
-
-        if (!no_progress) {
-			if (quiet) {
-				const int progress = context_iterator.progress();
-				for (; old_progress < progress; ++old_progress) {
-					std::cout << ".";
-					if (stderr_progress)
-						std::cerr << ".";
-				}
-				std::cout << std::flush;
-				if (stderr_progress)
-					std::cerr << std::flush;
-			} else {
-				const int progress = context_iterator.progress() / 2;
-				if (old_progress != progress) Logger::ProgressBar(progress);
-				old_progress = progress;
-			}
+    if (is_tesselated && (center_model || model_offset)) {
+      double* offset = serializer->settings().offset;
+      if (center_model) {
+        if (site_local_placement || building_local_placement) {
+          Logger::Error("Cannot use --center-model together with --{site,building}-local-placement");
+          delete serializer;
+          return EXIT_FAILURE;
         }
+
+        if (!quiet) Logger::Status("Computing bounds...");
+        context_iterator.compute_bounds();
+        if (!quiet) Logger::Status("Done!");
+
+        gp_XYZ center = (context_iterator.bounds_min() + context_iterator.bounds_max()) * 0.5;
+        offset[0] = -center.X();
+        offset[1] = -center.Y();
+        offset[2] = -center.Z();
+      } else {
+        if (sscanf(offset_str.c_str(), "%lf;%lf;%lf", &offset[0], &offset[1], &offset[2]) != 3) {
+          std::cerr << "[Error] Invalid use of --model-offset\n";
+          delete serializer;
+          std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+          print_options(serializer_options);
+          return EXIT_FAILURE;
+        }
+      }
+
+      std::stringstream msg;
+      msg << "Using model offset (" << offset[0] << "," << offset[1] << "," << offset[2] << ")";
+      Logger::Notice(msg.str());
+    }
+
+    if (!quiet) {
+      Logger::Status("Creating geometry...");
+    }
+
+    // The functions IfcGeom::Iterator::get() and IfcGeom::Iterator::next() 
+    // wrap an iterator of all geometrical products in the Ifc file. 
+    // IfcGeom::Iterator::get() returns an IfcGeom::TriangulationElement or 
+    // -BRepElement pointer, based on current settings. (see IfcGeomIterator.h 
+    // for definition) IfcGeom::Iterator::next() is used to poll whether more 
+    // geometrical entities are available. None of these functions throw 
+    // exceptions, neither for parsing errors or geometrical errors. Upon 
+    // calling next() the entity to be returned has already been processed, a 
+    // non-null return value guarantees that a successfully processed product is 
+    // available. 
+    size_t num_created = 0;
+	
+    do {
+      IfcGeom::Element<real_t> *geom_object = context_iterator.get();
+
+      if (is_tesselated)
+      {
+        serializer->write(static_cast<const IfcGeom::TriangulationElement<real_t>*>(geom_object));
+      }
+      else
+      {
+        serializer->write(static_cast<const IfcGeom::BRepElement<real_t>*>(geom_object));
+      }
+
+      if (!no_progress) {
+        if (quiet) {
+          const int progress = context_iterator.progress();
+          for (; old_progress < progress; ++old_progress) {
+            std::cout << ".";
+            if (stderr_progress)
+              std::cerr << ".";
+          }
+          std::cout << std::flush;
+          if (stderr_progress)
+            std::cerr << std::flush;
+        } else {
+          const int progress = context_iterator.progress() / 2;
+          if (old_progress != progress) Logger::ProgressBar(progress);
+          old_progress = progress;
+        }
+      }
     } while (++num_created, context_iterator.next());
 
-	if (!no_progress && quiet) {
-		for (; old_progress < 100; ++old_progress) {
-			std::cout << ".";
-			if (stderr_progress)
-				std::cerr << ".";
-		}
-		std::cout << std::flush;
-		if (stderr_progress)
-			std::cerr << std::flush;
-	} else {
-		Logger::Status("\rDone creating geometry (" + boost::lexical_cast<std::string>(num_created) +
-			" objects)                                ");
-	}
+    if (!no_progress && quiet) {
+      for (; old_progress < 100; ++old_progress) {
+        std::cout << ".";
+        if (stderr_progress)
+          std::cerr << ".";
+      }
+      std::cout << std::flush;
+      if (stderr_progress)
+        std::cerr << std::flush;
+    } else {
+      Logger::Status("\rDone creating geometry (" + boost::lexical_cast<std::string>(num_created) +
+                     " objects)                                ");
+    }
 
     serializer->finalize();
-	delete serializer;
+    delete serializer;
 
     // Renaming might fail (e.g. maybe the existing file was open in a viewer application)
     // Do not remove the temp file as user can salvage the conversion result from it.
