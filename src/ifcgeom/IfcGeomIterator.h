@@ -524,6 +524,8 @@ class Iterator {
 
     free_shapes();
   }
+
+  IfcSchema::IfcRepresentation::list::ptr representations;  
   
  private:
   Iterator(const Iterator&); // N/I
@@ -533,7 +535,7 @@ class Iterator {
   IfcParse::IfcFile* ifc_file;
   bool owns_ifc_file;  
   // A container and iterator for IfcRepresentations
-  IfcSchema::IfcRepresentation::list::ptr representations;
+
   IfcSchema::IfcRepresentation::list::it representation_iterator;
   // The object is fetched beforehand to be sure that get() returns a valid element
   TriangulationElement<P>* current_triangulation;

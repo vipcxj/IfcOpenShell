@@ -684,7 +684,12 @@ int main(int argc, char** argv)
     // non-null return value guarantees that a successfully processed product is 
     // available. 
     size_t num_created = 0;
-	
+
+          Logger::Status("\rgetting ready to process "
+                         + boost::lexical_cast<std::string>(context_iterator.representations)
+                     + " objects)                                ");
+
+    
     do {
       IfcGeom::Element<real_t> *geom_object = context_iterator.get();
 
@@ -714,6 +719,10 @@ int main(int argc, char** argv)
           old_progress = progress;
         }
       }
+      Logger::Status("\rcreating geometry ("
+                     + boost::lexical_cast<std::string>(num_created)
+                     + " objects)                                ");
+
     } while (++num_created, context_iterator.next());
 
     if (!no_progress && quiet) {
