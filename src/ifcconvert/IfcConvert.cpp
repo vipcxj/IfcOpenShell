@@ -685,9 +685,9 @@ int main(int argc, char** argv)
     // available. 
     size_t num_created = 0;
 
-          Logger::Status("\rgetting ready to process "
-                         + boost::lexical_cast<std::string>(context_iterator.representations)
-                     + " objects)                                ");
+    Logger::Status("\rgetting ready to process "
+                   + boost::lexical_cast<std::string>(context_iterator.representations->size())
+                   + " objects)                                ");
 
     
     do {
