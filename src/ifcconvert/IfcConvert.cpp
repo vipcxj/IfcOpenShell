@@ -719,9 +719,9 @@ int main(int argc, char** argv)
           old_progress = progress;
         }
       }
-      Logger::Status("\rcreating geometry ("
-                     + boost::lexical_cast<std::string>(num_created)
-                     + " objects)                                ");
+      // Logger::Status("\rcreating geometry ("
+      //                + boost::lexical_cast<std::string>(num_created)
+      //                + " objects)                                ");
 
     } while (++num_created, context_iterator.next());
 

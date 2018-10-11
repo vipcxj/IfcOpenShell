@@ -368,6 +368,13 @@ class Iterator {
         ret->SetParents(parents);
       }
     }
+    Logger::Status("created element, type:  "
+                   + boost::lexical_cast<std::string>( ret->type() )
+                   + ", guid: " +boost::lexical_cast<std::string>( ret->guid() )
+                   + ", context: " +boost::lexical_cast<std::string>( ret->context() )
+                   + ", unique_id: " +boost::lexical_cast<std::string>( ret->unique_id() )
+                   + ", name: " +boost::lexical_cast<std::string>( ret->name() )
+                   );
 
     return ret;
   }
