@@ -59,6 +59,18 @@ inline static bool ALMOST_THE_SAME(const T &a, const T &b, double tolerance = AL
 namespace IfcGeom
 {
 
+enum ShapeType
+{
+  ST_SHAPELIST,
+  ST_SHAPE,
+  ST_FACE,
+  ST_WIRE,
+  ST_CURVE,
+  ST_EDGE,
+  ST_VERTEX,
+  ST_OTHER
+};
+
 class IFC_GEOM_API geometry_exception : public std::exception
 {
 protected:
@@ -91,6 +103,8 @@ private:
   // #ifndef NO_CACHE
   //   Cache cache;
   // #endif
+
+  // used in IfcRenderStyles
   std::map<int, SurfaceStyle> style_cache;
 
   const SurfaceStyle *internalize_surface_style(
@@ -171,6 +185,9 @@ public:
     // or all (0)
     GV_DIMENSIONALITY
   };
+
+  /////////////////////////////
+  ///////////////////////////// IfcGeomFunctions
 
   bool convert_wire_to_face(const TopoDS_Wire &wire, TopoDS_Face &face);
 
@@ -362,9 +379,9 @@ public:
   const SurfaceStyle *get_style(const IfcSchema::IfcMaterial *);
 
 #ifdef USE_IFC4
-// Sander: peeled these functions apart, b/c it confused my poor editor =(
-// emacs' hide/show could not fold the {...} bodies properly...
-template <typename T>
+  // Sander: peeled these functions apart, b/c it confused my poor editor =(
+  // emacs' hide/show could not fold the {...} bodies properly...
+  template <typename T>
   std::pair<IfcSchema::IfcSurfaceStyle *, T *>
   _get_surface_style(const IfcSchema::IfcStyledItem *si)
   {
@@ -467,7 +484,7 @@ template <typename T>
   //#include "IfcRegisterGeomHeader.h"
 
   ///////////////////////////// CONVERTERS
-  ///////////////////////////// GeomFaces
+  ///////////////////////////// IfcGeomFaces
 
   bool convert(const IfcSchema::IfcFace *l, TopoDS_Shape &face);
 
@@ -515,8 +532,83 @@ template <typename T>
 
 #endif
 
+  ///////////////////////////// CONVERTERS
+  ///////////////////////////// IfcGeomCurves
 
-}; // namespace IfcGeom
+  bool convert(const IfcSchema::IfcCircle *l, Handle(Geom_Curve) & curve);
+  bool convert(const IfcSchema::IfcEllipse *l, Handle(Geom_Curve) & curve);
+  bool convert(const IfcSchema::IfcLine *l, Handle(Geom_Curve) & curve);
+
+#ifdef USE_IFC4
+  bool convert(const IfcSchema::IfcBSplineCurveWithKnots *l, Handle(Geom_Curve) & curve);
+#endif
+
+  ///////////////////////////// CONVERTERS
+  ///////////////////////////// IfcGeomShapes
+  bool convert(const IfcSchema::IfcExtrudedAreaSolid *l, TopoDS_Shape &shape);
+
+#ifdef USE_IFC4
+  bool convert(const IfcSchema::IfcExtrudedAreaSolidTapered *l, TopoDS_Shape &shape);
+
+#endif
+
+  bool convert(const IfcSchema::IfcSurfaceOfLinearExtrusion *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcSurfaceOfRevolution *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcRevolvedAreaSolid *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcManifoldSolidBrep *l, IfcRepresentationShapeItems &shape);
+
+  bool convert(const IfcSchema::IfcFaceBasedSurfaceModel *l, IfcRepresentationShapeItems &shapes);
+
+  bool convert(const IfcSchema::IfcHalfSpaceSolid *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcPolygonalBoundedHalfSpace *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcShellBasedSurfaceModel *l, IfcRepresentationShapeItems &shapes);
+
+  bool convert(const IfcSchema::IfcBooleanResult *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcConnectedFaceSet *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcMappedItem *l, IfcRepresentationShapeItems &shapes);
+
+  bool convert(const IfcSchema::IfcRepresentation *l, IfcRepresentationShapeItems &shapes);
+
+  bool convert(const IfcSchema::IfcGeometricSet *l, IfcRepresentationShapeItems &shapes);
+
+  bool convert(const IfcSchema::IfcBlock *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcRectangularPyramid *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcRightCircularCylinder *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcRightCircularCone *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcSphere *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcCsgSolid *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcCurveBoundedPlane *l, TopoDS_Shape &face);
+
+  bool convert(const IfcSchema::IfcRectangularTrimmedSurface *l, TopoDS_Shape &face);
+
+  bool convert(const IfcSchema::IfcSurfaceCurveSweptAreaSolid *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcSweptDiskSolid *l, TopoDS_Shape &shape);
+
+#ifdef USE_IFC4
+
+  bool convert(const IfcSchema::IfcCylindricalSurface *l, TopoDS_Shape &face);
+
+  bool convert(const IfcSchema::IfcAdvancedBrep *l, TopoDS_Shape &shape);
+
+  bool convert(const IfcSchema::IfcTriangulatedFaceSet *l, TopoDS_Shape &shape);
+
+#endif
+
+}; // Class Kernel
 
 IFC_GEOM_API IfcSchema::IfcProductDefinitionShape *tesselate(const TopoDS_Shape &shape,
                                                              double deflection);

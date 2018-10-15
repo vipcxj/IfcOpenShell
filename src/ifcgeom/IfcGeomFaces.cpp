@@ -103,7 +103,6 @@
 #endif
 
 #include "../ifcgeom/IfcGeom.h"
-#include "../ifcgeom/IfcGeomFaces.h"
 
 bool IfcGeom::Kernel::convert(const IfcSchema::IfcFace *l, TopoDS_Shape &face) {
   IfcSchema::IfcFaceBound::list::ptr bounds = l->Bounds();

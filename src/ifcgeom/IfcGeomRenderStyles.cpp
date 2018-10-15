@@ -55,7 +55,7 @@ const IfcGeom::SurfaceStyle* IfcGeom::Kernel::internalize_surface_style(const st
 		return 0;
 	}
 	int surface_style_id = shading_styles.first->entity->id();
-	std::map<int,SurfaceStyle>::const_iterator it = style_cache.find(surface_style_id);
+ 	std::map<int,SurfaceStyle>::const_iterator it = style_cache.find(surface_style_id);
 	if (it != style_cache.end()) {
 		return &(it->second);
 	}
