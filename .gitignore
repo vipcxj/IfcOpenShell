@@ -1,3 +1,5 @@
+.nfs00*
+*flymake.*
 cscope.out
 *.user
 .#*

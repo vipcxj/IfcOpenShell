@@ -43,7 +43,7 @@
 #include <fstream>
 #include <sstream>
 #include <set>
-#include <time.h>
+#include <ctime>
 
 #if USE_VLD
 #include <vld.h>
@@ -129,11 +129,11 @@ IfcGeom::string_arg_filter tag_filter(IfcSchema::Type::IfcProxy, 8, IfcSchema::T
 struct geom_filter
 {
     geom_filter(bool include, bool traverse) : type(UNUSED), include(include), traverse(traverse) {}
-    geom_filter() : type(UNUSED), include(false), traverse(false) {}
+    geom_filter()  {}
     enum filter_type { UNUSED, ENTITY_TYPE, LAYER_NAME, ENTITY_ARG };
-    filter_type type;
-    bool include;
-    bool traverse;
+    filter_type type{UNUSED};
+    bool include{false};
+    bool traverse{false};
     std::string arg;
     std::set<std::string> values;
 };
@@ -484,7 +484,7 @@ int main(int argc, char** argv)
     if (!filter_filename.empty()) {
         size_t num_filters = read_filters_from_file(filter_filename, include_filter, include_traverse_filter, exclude_filter, exclude_traverse_filter);
         if (num_filters) {
-            Logger::Notice(boost::lexical_cast<std::string>(num_filters) + " filters read from '" + filter_filename + "'.");
+            Logger::Notice(std::to_string(num_filters) + " filters read from '" + filter_filename + "'.");
         } else {
             std::cerr << "[Error] No filters read from '" + filter_filename + "'.\n";
             return EXIT_FAILURE;
@@ -686,7 +686,7 @@ int main(int argc, char** argv)
     size_t num_created = 0;
 
     Logger::Status("\rgetting ready to process "
-                   + boost::lexical_cast<std::string>(context_iterator.representations->size())
+                   + std::to_string(context_iterator.representations->size())
                    + " objects)                                ");
 
     
@@ -707,12 +707,14 @@ int main(int argc, char** argv)
           const int progress = context_iterator.progress();
           for (; old_progress < progress; ++old_progress) {
             std::cout << ".";
-            if (stderr_progress)
+            if (stderr_progress) {
               std::cerr << ".";
+}
           }
           std::cout << std::flush;
-          if (stderr_progress)
+          if (stderr_progress) {
             std::cerr << std::flush;
+}
         } else {
           const int progress = context_iterator.progress() / 2;
           if (old_progress != progress) Logger::ProgressBar(progress);
@@ -728,14 +730,16 @@ int main(int argc, char** argv)
     if (!no_progress && quiet) {
       for (; old_progress < 100; ++old_progress) {
         std::cout << ".";
-        if (stderr_progress)
+        if (stderr_progress) {
           std::cerr << ".";
+}
       }
       std::cout << std::flush;
-      if (stderr_progress)
+      if (stderr_progress) {
         std::cerr << std::flush;
+}
     } else {
-      Logger::Status("\rDone creating geometry (" + boost::lexical_cast<std::string>(num_created) +
+      Logger::Status("\rDone creating geometry (" + std::to_string(num_created) +
                      " objects)                                ");
     }
 
@@ -755,7 +759,7 @@ int main(int argc, char** argv)
 	time(&end);
 
 	if (!quiet) {
-		int seconds = (int)difftime(end, start);
+		int seconds = static_cast<int>(difftime(end, start));
 		std::stringstream msg;
 		int minutes = seconds / 60;
 		seconds = seconds % 60;
@@ -789,7 +793,7 @@ void write_log(bool header) {
 bool init_input_file(const std::string &filename, IfcParse::IfcFile &ifc_file, bool no_progress, bool mmap)
 {
     // Prevent IfcFile::Init() prints by setting output to null temporarily
-    if (no_progress) { Logger::SetOutput(NULL, &log_stream); }
+    if (no_progress) { Logger::SetOutput(nullptr, &log_stream); }
 
 #ifdef USE_MMAP
 	if (!ifc_file.Init(filename, mmap)) {
@@ -865,11 +869,11 @@ size_t read_filters_from_file(
             else if (type == "exclude") { if (append_filter("exclude", values, exclude_filter)) { ++num_filters; } }
             else if (type == "exclude+") { if (append_filter("exclude+", values, exclude_traverse_filter)) { ++num_filters; } }
             else {
-                std::cerr << "[Error] Invalid filtering type at line " + boost::lexical_cast<std::string>(line_number) + "\n";
+                std::cerr << "[Error] Invalid filtering type at line " + std::to_string(line_number) + "\n";
                 return 0;
             }
         } catch(...) {
-            std::cerr << "[Error] Unable to parse filter at line " + boost::lexical_cast<std::string>(line_number) + ".\n";
+            std::cerr << "[Error] Unable to parse filter at line " + std::to_string(line_number) + ".\n";
             return 0;
         }
     }
@@ -989,12 +993,12 @@ std::vector<IfcGeom::filter_t> setup_filters(const std::vector<geom_filter>& fil
         }
     }
 
-    if (!layer_filter.values.empty()) { filter_funcs.push_back(boost::ref(layer_filter));  }
-    if (!entity_filter.values.empty()) { filter_funcs.push_back(boost::ref(entity_filter)); }
-    if (!guid_filter.values.empty()) { filter_funcs.push_back(boost::ref(guid_filter)); }
-    if (!name_filter.values.empty()) { filter_funcs.push_back(boost::ref(name_filter)); }
-    if (!desc_filter.values.empty()) { filter_funcs.push_back(boost::ref(desc_filter)); }
-    if (!tag_filter.values.empty()) { filter_funcs.push_back(boost::ref(tag_filter)); }
+    if (!layer_filter.values.empty()) { filter_funcs.emplace_back(boost::ref(layer_filter));  }
+    if (!entity_filter.values.empty()) { filter_funcs.emplace_back(boost::ref(entity_filter)); }
+    if (!guid_filter.values.empty()) { filter_funcs.emplace_back(boost::ref(guid_filter)); }
+    if (!name_filter.values.empty()) { filter_funcs.emplace_back(boost::ref(name_filter)); }
+    if (!desc_filter.values.empty()) { filter_funcs.emplace_back(boost::ref(desc_filter)); }
+    if (!tag_filter.values.empty()) { filter_funcs.emplace_back(boost::ref(tag_filter)); }
 
     return filter_funcs;
 }
