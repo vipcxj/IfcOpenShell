@@ -52,13 +52,14 @@ inline static bool ALMOST_THE_SAME(const T &a, const T &b, double tolerance = AL
 
 #include "../ifcgeom/IfcGeomElement.h"
 #include "../ifcgeom/IfcGeomRepresentation.h"
-#include "../ifcgeom/IfcGeomShapeType.h"
+//#include "../ifcgeom/IfcGeomShapeType.h"
 #include "../ifcgeom/IfcRepresentationShapeItem.h"
 #include "ifc_geom_api.h"
 
 namespace IfcGeom
 {
 
+// Sander: this is IfcGeomShapeType.h , included it here.
 enum ShapeType
 {
   ST_SHAPELIST,
@@ -187,11 +188,7 @@ public:
   };
 
   /////////////////////////////
-  ///////////////////////////// IfcGeomFunctions
-
-  bool convert_wire_to_face(const TopoDS_Wire &wire, TopoDS_Face &face);
-
-  bool convert_curve_to_wire(const Handle(Geom_Curve) & curve, TopoDS_Wire &wire);
+  ///////////////////////////// IfcRegister
 
   bool convert_shapes(const IfcUtil::IfcBaseClass *L, IfcRepresentationShapeItems &result);
 
@@ -199,14 +196,21 @@ public:
 
   bool convert_shape(const IfcUtil::IfcBaseClass *L, TopoDS_Shape &result);
 
-  bool flatten_shape_list(const IfcGeom::IfcRepresentationShapeItems &shapes, TopoDS_Shape &result,
-                          bool fuse);
-
   bool convert_wire(const IfcUtil::IfcBaseClass *L, TopoDS_Wire &result);
+
+  bool convert_face(const IfcUtil::IfcBaseClass *L, TopoDS_Shape &result);
+
+  /////////////////////////////
+  ///////////////////////////// IfcGeomFunctions
+
+  bool convert_wire_to_face(const TopoDS_Wire &wire, TopoDS_Face &face);
+
+  bool convert_curve_to_wire(const Handle(Geom_Curve) & curve, TopoDS_Wire &wire);
 
   bool convert_curve(const IfcUtil::IfcBaseClass *L, Handle(Geom_Curve) & result);
 
-  bool convert_face(const IfcUtil::IfcBaseClass *L, TopoDS_Shape &result);
+  bool flatten_shape_list(const IfcGeom::IfcRepresentationShapeItems &shapes, TopoDS_Shape &result,
+                          bool fuse);
 
   bool convert_openings(const IfcSchema::IfcProduct *entity,
                         const IfcSchema::IfcRelVoidsElement::list::ptr &openings,
@@ -479,8 +483,6 @@ public:
     return std::make_pair<IfcSchema::IfcSurfaceStyle *, T *>(0, 0);
   } // end get_surfacestyle
 
-  void set_conversion_placement_rel_to(IfcSchema::Type::Enum type);
-
   //#include "IfcRegisterGeomHeader.h"
 
   ///////////////////////////// CONVERTERS
@@ -607,6 +609,74 @@ public:
   bool convert(const IfcSchema::IfcTriangulatedFaceSet *l, TopoDS_Shape &shape);
 
 #endif
+
+  ///////////////////////////// IfcGeomHelpers
+  ///////////////////////////// CONVERTERS
+
+  bool convert(const IfcSchema::IfcCartesianPoint *l, gp_Pnt &point);
+
+  bool convert(const IfcSchema::IfcDirection *l, gp_Dir &dir);
+
+  bool convert(const IfcSchema::IfcVector *l, gp_Vec &v);
+
+  bool convert(const IfcSchema::IfcAxis2Placement3D *l, gp_Trsf &trsf);
+
+  bool convert(const IfcSchema::IfcAxis1Placement *l, gp_Ax1 &ax);
+
+  bool convert(const IfcSchema::IfcCartesianTransformationOperator3D *l, gp_Trsf &trsf);
+
+  bool convert(const IfcSchema::IfcCartesianTransformationOperator2D *l, gp_Trsf2d &trsf);
+
+  bool convert(const IfcSchema::IfcCartesianTransformationOperator3DnonUniform *l, gp_GTrsf &gtrsf);
+
+  bool convert(const IfcSchema::IfcCartesianTransformationOperator2DnonUniform *l,
+               gp_GTrsf2d &gtrsf);
+
+  bool convert(const IfcSchema::IfcPlane *pln, gp_Pln &plane);
+
+  bool convert(const IfcSchema::IfcAxis2Placement2D *l, gp_Trsf2d &trsf);
+
+  bool convert(const IfcSchema::IfcObjectPlacement *l, gp_Trsf &trsf);
+
+  ///////////////////////////// MISC
+  //////////////////////////////////////////////////////////
+
+  void set_conversion_placement_rel_to(IfcSchema::Type::Enum type);
+
+  ///////////////////////////// IfcGeomWires
+  ///////////////////////////// CONVERTERS
+
+
+bool convert(const IfcSchema::IfcCompositeCurve* l, TopoDS_Wire& wire);
+
+bool convert(const IfcSchema::IfcTrimmedCurve* l, TopoDS_Wire& wire);
+
+bool convert(const IfcSchema::IfcPolyline* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcPolyLoop* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcArbitraryOpenProfileDef* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcEdgeCurve* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcEdgeLoop* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcEdge* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcOrientedEdge* l, TopoDS_Wire& result);
+
+bool convert(const IfcSchema::IfcSubedge* l, TopoDS_Wire& result);
+
+#ifdef USE_IFC4
+
+bool convert(const IfcSchema::IfcIndexedPolyCurve* l, TopoDS_Wire& result);
+
+#endif
+
+  //////////////////////////////////////////////////////////
+
+
+
 
 }; // Class Kernel
 

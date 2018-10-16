@@ -503,7 +503,7 @@ bool IfcGeom::Kernel::convert_wire(const IfcBaseClass *l, TopoDS_Wire &r)
 
 bool IfcGeom::Kernel::convert_face(const IfcBaseClass *l, TopoDS_Shape &r)
 {
-// #include "IfcRegisterConvertFace.h"
+  // #include "IfcRegisterConvertFace.h"
 
   /*
 #include "IfcRegisterUndef.h"
@@ -514,35 +514,24 @@ bool IfcGeom::Kernel::convert_face(const IfcBaseClass *l, TopoDS_Shape &r)
 
 #include "IfcRegister.h"
 */
-  
+
   // IfcAsymmetricIShapeProfileDef included
   // IfcFaceSurface included
   // IfcAdvancedFace included in case of IFC4
 
-  for (const auto& p:{IfcArbitraryProfileDefWithVoids,
-                      IfcArbitraryClosedProfileDef,
-                      IfcRoundedRectangleProfileDef,
-                      IfcRectangleHollowProfileDef,
-                      IfcRectangleProfileDef,
-                      IfcTrapeziumProfileDef,
-                      IfcCShapeProfileDef,
-                      IfcIShapeProfileDef,
-                      IfcLShapeProfileDef,
-                      IfcTShapeProfileDef,
-                      IfcUShapeProfileDef,
-                      IfcZShapeProfileDef,
-                      IfcCircleHollowProfileDef,
-                      IfcCircleProfileDef,
-                      IfcEllipseProfileDef,
-                      IfcCenterLineProfileDef,
-                      IfcCompositeProfileDef,
-                      IfcDerivedProfileDef,
-                      IfcFace} )
+  for (const IfcBaseClass &bc :
+       {IfcArbitraryProfileDefWithVoids, IfcArbitraryClosedProfileDef,
+        IfcRoundedRectangleProfileDef, IfcRectangleHollowProfileDef, IfcRectangleProfileDef,
+        IfcTrapeziumProfileDef, IfcCShapeProfileDef, IfcIShapeProfileDef, IfcLShapeProfileDef,
+        IfcTShapeProfileDef, IfcUShapeProfileDef, IfcZShapeProfileDef, IfcCircleHollowProfileDef,
+        IfcCircleProfileDef, IfcEllipseProfileDef, IfcCenterLineProfileDef, IfcCompositeProfileDef,
+        IfcDerivedProfileDef, IfcFace})
   {
-              if (l->is(p::Class())
-                  return convert ((p*)l,r);
+    if (l->is(bc::Class()))
+    {
+      return convert((bc *)l, r);
+    }
   }
-
   Logger::Message(Logger::LOG_ERROR, "No operation defined for:", l->entity);
   return false;
 }
@@ -553,7 +542,7 @@ bool IfcGeom::Kernel::convert_curve(const IfcBaseClass *l, Handle(Geom_Curve) & 
   /*
 #include "IfcRegisterUndef.h"
 #define CURVE(T) \
-	if ( l->is(T::Class()) ) return convert((T*)l,r);
+        if ( l->is(T::Class()) ) return convert((T*)l,r);
 #include "IfcRegisterDef.h"
 
 #include "IfcRegister.h"
@@ -568,7 +557,7 @@ CURVE(IfcLine);
 CURVE(IfcBSplineCurveWithKnots);
 #endif
   */
-  
+
   Logger::Message(Logger::LOG_ERROR, "No operation defined for:", l->entity);
   return false;
 }

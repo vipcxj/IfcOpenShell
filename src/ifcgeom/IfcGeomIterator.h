@@ -590,7 +590,7 @@ class Iterator {
     // benchmarked extensively: https://github.com/IfcOpenShell/IfcOpenShell/pull/47
     static const int clear_interval = 64;
     if (done % clear_interval == clear_interval - 1) {
-      kernel.purge_cache();
+      // kernel.purge_cache();
     }
     ifcproducts.reset();
     ++ representation_iterator;
