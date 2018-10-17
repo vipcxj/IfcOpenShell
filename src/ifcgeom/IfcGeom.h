@@ -187,8 +187,9 @@ public:
     GV_DIMENSIONALITY
   };
 
-  /////////////////////////////
-  ///////////////////////////// IfcRegister
+  //////////////////////////////////////////////////////////
+  ///////////////////////////// IfcConvertFunctions
+// NOTE(Sander) ported from IfcRegister
 
   bool convert_shapes(const IfcUtil::IfcBaseClass *L, IfcRepresentationShapeItems &result);
 
@@ -200,14 +201,14 @@ public:
 
   bool convert_face(const IfcUtil::IfcBaseClass *L, TopoDS_Shape &result);
 
-  /////////////////////////////
+  bool convert_curve(const IfcUtil::IfcBaseClass *L, Handle(Geom_Curve) & result);
+
+  //////////////////////////////////////////////////////////
   ///////////////////////////// IfcGeomFunctions
 
   bool convert_wire_to_face(const TopoDS_Wire &wire, TopoDS_Face &face);
 
   bool convert_curve_to_wire(const Handle(Geom_Curve) & curve, TopoDS_Wire &wire);
-
-  bool convert_curve(const IfcUtil::IfcBaseClass *L, Handle(Geom_Curve) & result);
 
   bool flatten_shape_list(const IfcGeom::IfcRepresentationShapeItems &shapes, TopoDS_Shape &result,
                           bool fuse);
@@ -287,8 +288,6 @@ public:
   static int count(const TopoDS_Shape &, TopAbs_ShapeEnum);
 
   bool find_wall_end_points(const IfcSchema::IfcWall *, gp_Pnt &start, gp_Pnt &end);
-
-  IfcSchema::IfcSurfaceStyleShading *get_surface_style(IfcSchema::IfcRepresentationItem *item);
 
   const IfcSchema::IfcRepresentationItem *
   find_item_carrying_style(const IfcSchema::IfcRepresentationItem *item);
@@ -378,6 +377,9 @@ public:
 
   IfcSchema::IfcProduct::list::ptr products_represented_by(const IfcSchema::IfcRepresentation *);
 
+  //////////////////////////////////////////////////////////
+  /////////////////////////////  IfcGeomRenderstyles
+
   const SurfaceStyle *get_style(const IfcSchema::IfcRepresentationItem *);
 
   const SurfaceStyle *get_style(const IfcSchema::IfcMaterial *);
@@ -460,6 +462,10 @@ public:
   } // end _get_surface_style, confuses HIDE/SHOW
 
 #endif
+
+  // NOTE(Sander): removed this definition
+  // overloading by return .. rtags says there are no references to this function
+  // IfcSchema::IfcSurfaceStyleShading *get_surface_style(IfcSchema::IfcRepresentationItem *item);
 
   template <typename T>
   std::pair<IfcSchema::IfcSurfaceStyle *, T *>
@@ -646,37 +652,33 @@ public:
   ///////////////////////////// IfcGeomWires
   ///////////////////////////// CONVERTERS
 
+  bool convert(const IfcSchema::IfcCompositeCurve *l, TopoDS_Wire &wire);
 
-bool convert(const IfcSchema::IfcCompositeCurve* l, TopoDS_Wire& wire);
+  bool convert(const IfcSchema::IfcTrimmedCurve *l, TopoDS_Wire &wire);
 
-bool convert(const IfcSchema::IfcTrimmedCurve* l, TopoDS_Wire& wire);
+  bool convert(const IfcSchema::IfcPolyline *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcPolyline* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcPolyLoop *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcPolyLoop* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcArbitraryOpenProfileDef *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcArbitraryOpenProfileDef* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcEdgeCurve *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcEdgeCurve* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcEdgeLoop *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcEdgeLoop* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcEdge *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcEdge* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcOrientedEdge *l, TopoDS_Wire &result);
 
-bool convert(const IfcSchema::IfcOrientedEdge* l, TopoDS_Wire& result);
-
-bool convert(const IfcSchema::IfcSubedge* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcSubedge *l, TopoDS_Wire &result);
 
 #ifdef USE_IFC4
 
-bool convert(const IfcSchema::IfcIndexedPolyCurve* l, TopoDS_Wire& result);
+  bool convert(const IfcSchema::IfcIndexedPolyCurve *l, TopoDS_Wire &result);
 
 #endif
 
   //////////////////////////////////////////////////////////
-
-
-
 
 }; // Class Kernel
 
