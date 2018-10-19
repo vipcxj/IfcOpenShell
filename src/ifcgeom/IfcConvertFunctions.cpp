@@ -18,6 +18,24 @@
  ********************************************************************************/
 
 #include "IfcGeom.h"
+
+#include <TopoDS_Face.hxx>
+#include <TopoDS_Shape.hxx>
+#include <TopoDS_Wire.hxx>
+#include <gp_Dir.hxx>
+#include <gp_GTrsf.hxx>
+#include <gp_GTrsf2d.hxx>
+#include <gp_Mat.hxx>
+#include <gp_Mat2d.hxx>
+#include <gp_Pln.hxx>
+#include <gp_Pnt.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Trsf2d.hxx>
+
+#include "../ifcparse/IfcBaseClass.h"
+#include "../ifcparse/IfcParse.h"
+
+
 // #include "IfcGeomShapeType.h" //moved definition to ifcgeom.h, it defines ST_SHAPELIST
 
 using namespace IfcSchema;
@@ -37,60 +55,41 @@ bool IfcGeom::Kernel::convert_shapes(const IfcBaseClass *l, IfcRepresentationSha
     return false;
   }
 
-  // T:
+#define SHAPES(T)                                                                                  \
+  if (l->is(T::Class()))                                                                           \
+  {                                                                                                \
+    try                                                                                            \
+    {                                                                                              \
+      return convert((T *)l, r);                                                                   \
+    }                                                                                              \
+    catch (const std::exception &e)                                                                \
+    {                                                                                              \
+      Logger::Message(Logger::LOG_ERROR,                                                           \
+                      std::string(e.what()) + "\nFailed to convert:", l->entity);                  \
+    }                                                                                              \
+    catch (const Standard_Failure &f)                                                              \
+    {                                                                                              \
+      if (f.GetMessageString())                                                                    \
+        Logger::Message(                                                                           \
+            Logger::LOG_ERROR,                                                                     \
+            std::string("Error in: ") + f.GetMessageString() + "\nFailed to convert:", l->entity); \
+      else                                                                                         \
+        Logger::Message(Logger::LOG_ERROR, "Failed to convert:", l->entity);                       \
+    }                                                                                              \
+    return false;                                                                                  \
+  }
+
+  SHAPES(IfcShellBasedSurfaceModel);
+  SHAPES(IfcFaceBasedSurfaceModel);
+  SHAPES(IfcRepresentation);
+  SHAPES(IfcMappedItem);
   // IfcFacetedBrep included
   // IfcAdvancedBrep included
   // IfcFacetedBrepWithVoids included
-  // IfcAdvancedBrepWithVoids includ
-
-  std::vector<Type::Enum> classlist = {
-      Type::IfcShellBasedSurfaceModel, Type::IfcFaceBasedSurfaceModel,
-      Type::IfcRepresentation,         Type::IfcMappedItem,
-      Type::IfcManifoldSolidBrep,      Type::IfcGeometricSet};
-
-  //#define SHAPES(T)
-
-  for (auto T : classlist)
-  {
-    if (l->is(T)) // if (l->is(T::Class()))
-    {
-      try
-      {
-        return convert((T *)l, r);
-      }
-      catch (const std::exception &e)
-      {
-        Logger::Message(Logger::LOG_ERROR,
-                        std::string(e.what()) + "nFailed to convert:", l->entity);
-      }
-      catch (const Standard_Failure &f)
-      {
-        if (f.GetMessageString())
-          Logger::Message(
-              Logger::LOG_ERROR,
-              std::string("Error in: ") + f.GetMessageString() + "nFailed to convert:", l->entity);
-        else
-          Logger::Message(Logger::LOG_ERROR, "Failed to convert:", l->entity);
-      }
-      return false;
-    }
-  }
-  // #include <TopoDS_Face.hxx>
-  // #include <TopoDS_Shape.hxx>
-  // #include <TopoDS_Wire.hxx>
-  // #include <gp_Dir.hxx>
-  // #include <gp_GTrsf.hxx>
-  // #include <gp_GTrsf2d.hxx>
-  // #include <gp_Mat.hxx>
-  // #include <gp_Mat2d.hxx>
-  // #include <gp_Pln.hxx>
-  // #include <gp_Pnt.hxx>
-  // #include <gp_Trsf.hxx>
-  // #include <gp_Trsf2d.hxx>
-
-  // #include "../ifcparse/IfcBaseClass.h"
-  // #include "../ifcparse/IfcParse.h"
-
+  // IfcAdvancedBrepWithVoids included
+  SHAPES(IfcManifoldSolidBrep);
+  SHAPES(IfcGeometricSet);
+  
   Logger::Message(Logger::LOG_ERROR, "No operation defined for:", l->entity);
   return false;
 }
