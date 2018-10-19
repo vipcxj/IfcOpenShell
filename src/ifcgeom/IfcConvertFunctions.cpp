@@ -247,6 +247,8 @@ bool IfcGeom::Kernel::convert_shape(const IfcBaseClass *l, TopoDS_Shape &r)
   else if (st == ST_SHAPE && include_solids_and_surfaces)
   {
     //#include "IfcRegisterConvertShape.h" // Dude, no.
+    /////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////
 #define SHAPE(T)                                                                                   \
   if (!processed && l->is(T::Class()))                                                             \
   {                                                                                                \
@@ -308,6 +310,8 @@ bool IfcGeom::Kernel::convert_shape(const IfcBaseClass *l, TopoDS_Shape &r)
     SHAPE(IfcRectangularTrimmedSurface);
     SHAPE(IfcSurfaceCurveSweptAreaSolid);
     SHAPE(IfcSweptDiskSolid);
+    /////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////
   }
   else if (st == ST_FACE && include_solids_and_surfaces)
   {
@@ -384,35 +388,34 @@ bool IfcGeom::Kernel::convert_wire(const IfcBaseClass *l, TopoDS_Wire &r)
 
 bool IfcGeom::Kernel::convert_face(const IfcBaseClass *l, TopoDS_Shape &r)
 {
-  // #include "IfcRegisterConvertFace.h"
 
-  /*
-#include "IfcRegisterUndef.h"
 #define FACE(T)                                                                                    \
   if (l->is(T::Class()))                                                                           \
     return convert((T *)l, r);
-#include "IfcRegisterDef.h"
 
-#include "IfcRegister.h"
-*/
-
+  FACE(IfcArbitraryProfileDefWithVoids);
+  FACE(IfcArbitraryClosedProfileDef);
+  FACE(IfcRoundedRectangleProfileDef);
+  FACE(IfcRectangleHollowProfileDef);
+  FACE(IfcRectangleProfileDef);
+  FACE(IfcTrapeziumProfileDef)
+  FACE(IfcCShapeProfileDef);
   // IfcAsymmetricIShapeProfileDef included
+  FACE(IfcIShapeProfileDef);
+  FACE(IfcLShapeProfileDef);
+  FACE(IfcTShapeProfileDef);
+  FACE(IfcUShapeProfileDef);
+  FACE(IfcZShapeProfileDef);
+  FACE(IfcCircleHollowProfileDef);
+  FACE(IfcCircleProfileDef);
+  FACE(IfcEllipseProfileDef);
+  FACE(IfcCenterLineProfileDef);
+  FACE(IfcCompositeProfileDef);
+  FACE(IfcDerivedProfileDef);
   // IfcFaceSurface included
   // IfcAdvancedFace included in case of IFC4
+  FACE(IfcFace);
 
-  for (const IfcBaseClass &bc :
-       {IfcArbitraryProfileDefWithVoids, IfcArbitraryClosedProfileDef,
-        IfcRoundedRectangleProfileDef, IfcRectangleHollowProfileDef, IfcRectangleProfileDef,
-        IfcTrapeziumProfileDef, IfcCShapeProfileDef, IfcIShapeProfileDef, IfcLShapeProfileDef,
-        IfcTShapeProfileDef, IfcUShapeProfileDef, IfcZShapeProfileDef, IfcCircleHollowProfileDef,
-        IfcCircleProfileDef, IfcEllipseProfileDef, IfcCenterLineProfileDef, IfcCompositeProfileDef,
-        IfcDerivedProfileDef, IfcFace})
-  {
-    if (l->is(bc::Class()))
-    {
-      return convert((bc *)l, r);
-    }
-  }
   Logger::Message(Logger::LOG_ERROR, "No operation defined for:", l->entity);
   return false;
 }
@@ -428,16 +431,17 @@ bool IfcGeom::Kernel::convert_curve(const IfcBaseClass *l, Handle(Geom_Curve) & 
 
 #include "IfcRegister.h"
 */
+#define CURVE(T)                                                                                   \
+  if (l->is(T::Class()))                                                                           \
+    return convert((T *)l, r);
 
-  /*
-CURVE(IfcCircle);
-CURVE(IfcEllipse);
-CURVE(IfcLine);
+  CURVE(IfcCircle);
+  CURVE(IfcEllipse);
+  CURVE(IfcLine);
 #ifdef USE_IFC4
-// IfcRationalBSplineCurveWithKnots included
-CURVE(IfcBSplineCurveWithKnots);
+  // IfcRationalBSplineCurveWithKnots included
+  CURVE(IfcBSplineCurveWithKnots);
 #endif
-  */
 
   Logger::Message(Logger::LOG_ERROR, "No operation defined for:", l->entity);
   return false;
