@@ -560,11 +560,25 @@ endif()
 
 set(IFCOPENSHELL_LIBRARIES IfcParse IfcGeom)
 
+# NOTE(Sander) stoopid emacs syntax checker buggering up the dir with temp cpp files...
+MACRO(SELECTIVE_GLOB retVal dir)
+    # Store unfiltered list of files into temporary list
+    file( GLOB _tmp_list ${dir} )
+    # Resulted list is initially empty. Copy all needed elements into it.
+    set(${retval}  "" CACHE INTERNAL "")
+    foreach(f ${_tmp_list})
+        if(NOT f MATCHES "*-flymake.cpp")
+            list(APPEND ${retVal} ${f})
+        endif()
+    endforeach()
+ENDMACRO()
+
 # IfcParse
-file(GLOB IFCPARSE_H_FILES ../src/ifcparse/*.h)
-file(GLOB IFCPARSE_CPP_FILES ../src/ifcparse/*.cpp)
-list(REMOVE_ITEM IFCPARSE_CPP_FILES "*-flymake.cpp")
-list(REMOVE_ITEM IFCPARSE_H_FILES "*-flymake.h")
+SELECTIVE_GLOB(IFCPARSE_H_FILES ../src/ifcparse/*.h)
+SELECTIVE_GLOB(IFCPARSE_CPP_FILES ../src/ifcparse/*.cpp)
+# file(GLOB IFCPARSE_H_FILES ../src/ifcparse/*.h)
+# file(GLOB IFCPARSE_CPP_FILES ../src/ifcparse/*.cpp)
+
 
 foreach(IFC_RELEASE ${IFC_RELEASE_NOT_USED})
     files_for_ifc_version(${IFC_RELEASE} SOURCE_FILES_NOT_USED)
@@ -584,10 +598,10 @@ IF(UNICODE_SUPPORT)
 ENDIF()
 
 # IfcGeom
-file(GLOB IFCGEOM_H_FILES ../src/ifcgeom/*.h)
-file(GLOB IFCGEOM_CPP_FILES ../src/ifcgeom/*.cpp)
-list(REMOVE_ITEM IFCGEOM_CPP_FILES "*-flymake.cpp")
-list(REMOVE_ITEM IFGEOM_H_FILES "*-flymake.h")
+SELECTIVE_GLOB(IFCGEOM_H_FILES ../src/ifcgeom/*.h)
+SELECTIVE_GLOB(IFCGEOM_CPP_FILES ../src/ifcgeom/*.cpp)
+# file(GLOB IFCGEOM_H_FILES ../src/ifcgeom/*.h)
+# file(GLOB IFCGEOM_CPP_FILES ../src/ifcgeom/*.cpp)
 
 set(IFCGEOM_FILES ${IFCGEOM_CPP_FILES} ${IFCGEOM_H_FILES})
 
@@ -597,10 +611,14 @@ set_target_properties(IfcGeom PROPERTIES COMPILE_FLAGS -DIFC_GEOM_EXPORTS)
 TARGET_LINK_LIBRARIES(IfcGeom IfcParse ${OPENCASCADE_LIBRARIES})
 
 # IfcConvert
-file(GLOB IFCCONVERT_CPP_FILES ../src/ifcconvert/*.cpp)
-file(GLOB IFCCONVERT_H_FILES ../src/ifcconvert/*.h)
-list(REMOVE_ITEM IFCCONVERT_CPP_FILES "*-flymake.cpp")
-list(REMOVE_ITEM IFCONVERT_H_FILES "*-flymake.h")
+
+SELECTIVE_GLOB(IFCCONVERT_CPP_FILES ../src/ifcconvert/*.cpp)
+SELECTIVE_GLOB(IFCCONVERT_H_FILES ../src/ifcconvert/*.h)
+
+#file(GLOB IFCCONVERT_CPP_FILES ../src/ifcconvert/*.cpp)
+#file(GLOB IFCCONVERT_H_FILES ../src/ifcconvert/*.h)
+#list(REMOVE_ITEM IFCCONVERT_CPP_FILES "*-flymake.cpp")
+#list(REMOVE_ITEM IFCONVERT_H_FILES "*-flymake.h")
 
 
 set(IFCCONVERT_FILES ${IFCCONVERT_CPP_FILES} ${IFCCONVERT_H_FILES})
@@ -617,10 +635,10 @@ if ((NOT WIN32) AND BUILD_SHARED_LIBS)
 endif()
 
 # IfcInfo
-file(GLOB IFCINFO_CPP_FILES ../src/ifcinfo/*.cpp)
-file(GLOB IFCINFO_H_FILES ../src/ifcinfo/*.h)
-list(REMOVE_ITEM IFCINFO_CPP_FILES "*-flymake.cpp")
-list(REMOVE_ITEM IFCINFO_H_FILES "*-flymake.h")
+SELECTIVE_GLOB( IFCINFO_CPP_FILES ../src/ifcinfo/*.cpp)
+SELECTIVE_GLOB( IFCINFO_H_FILES ../src/ifcinfo/*.h)
+# file(GLOB IFCINFO_CPP_FILES ../src/ifcinfo/*.cpp)
+# file(GLOB IFCINFO_H_FILES ../src/ifcinfo/*.h)
 
 
 set(IFCINFO_FILES ${IFCINFO_CPP_FILES} ${IFCINFO_H_FILES})
@@ -634,10 +652,10 @@ if ((NOT WIN32) AND BUILD_SHARED_LIBS)
 endif()
 
 # IfcGeomServer
-file(GLOB CPP_FILES ../src/ifcgeomserver/*.cpp)
-file(GLOB H_FILES ../src/ifcgeomserver/*.h)
-list(REMOVE_ITEM CPP_FILES "*-flymake.cpp")
-list(REMOVE_ITEM H_FILES "*-flymake.h")
+SELECTIVE_GLOB(CPP_FILES ../src/ifcgeomserver/*.cpp)
+SELECTIVE_GLOB(H_FILES ../src/ifcgeomserver/*.h)
+# file(GLOB CPP_FILES ../src/ifcgeomserver/*.cpp)
+# file(GLOB H_FILES ../src/ifcgeomserver/*.h)
 
 set(SOURCE_FILES ${CPP_FILES} ${H_FILES})
 ADD_EXECUTABLE(IfcGeomServer ${SOURCE_FILES})

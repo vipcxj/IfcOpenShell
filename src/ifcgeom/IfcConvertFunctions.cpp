@@ -282,6 +282,7 @@ bool IfcGeom::Kernel::convert_shape(const IfcBaseClass *l, TopoDS_Shape &r)
       return false;                                                                                \
     }                                                                                              \
   }
+    
 #ifdef USE_IFC4
     SHAPE(IfcCylindricalSurface);
     SHAPE(IfcAdvancedBrep);
