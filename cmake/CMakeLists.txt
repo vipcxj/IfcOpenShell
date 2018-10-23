@@ -567,7 +567,7 @@ MACRO(SELECTIVE_GLOB retVal dir)
     # Resulted list is initially empty. Copy all needed elements into it.
     set(${retval}  "" CACHE INTERNAL "")
     foreach(f ${_tmp_list})
-        if(NOT f MATCHES "*-flymake.cpp")
+        if(NOT f MATCHES "-flymake.cpp$")
             list(APPEND ${retVal} ${f})
         endif()
     endforeach()

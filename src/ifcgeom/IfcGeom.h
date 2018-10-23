@@ -189,7 +189,7 @@ public:
 
   //////////////////////////////////////////////////////////
   ///////////////////////////// IfcConvertFunctions
-// NOTE(Sander) ported from IfcRegister
+  // NOTE(Sander) pulled in from IfcRegister 
 
   bool convert_shapes(const IfcUtil::IfcBaseClass *L, IfcRepresentationShapeItems &result);
 
