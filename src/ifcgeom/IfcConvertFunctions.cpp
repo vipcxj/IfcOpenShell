@@ -218,11 +218,11 @@ IfcGeom::ShapeType IfcGeom::Kernel::shape_type(const IfcBaseClass *l)
 
 bool IfcGeom::Kernel::convert_shape(const IfcBaseClass *l, TopoDS_Shape &r)
 {
-  const unsigned int id = l->entity->id();
   bool success = false;
   bool processed = false;
   bool ignored = false;
 
+  //  const unsigned int id = l->entity->id();
   // #ifndef NO_CACHE                                                                                \
     //   std::map<int, TopoDS_Shape>::const_iterator it = cache.Shape.find(id);                    \
     //   if (it != cache.Shape.end())                                                              \
