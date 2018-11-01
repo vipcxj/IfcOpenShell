@@ -988,14 +988,29 @@ bool init_input_file(const std::string &filename, IfcParse::IfcFile &ifc_file, b
 #ifdef USE_MMAP
   if (!ifc_file.Init(filename, mmap))
   {
+   Logger::Error("Unable to parse input file '" + filename + "'");
+    return false;
+  }
 #else
-  (void)mmap;
+ (void)mmap;
   if (!ifc_file.Init(filename))
   {
-#endif
     Logger::Error("Unable to parse input file '" + filename + "'");
     return false;
   }
+#endif
+
+// #ifdef USE_MMAP
+//   if (!ifc_file.Init(filename, mmap))
+//   {
+// #else
+//   (void)mmap;
+//   if (!ifc_file.Init(filename))
+//   {
+// #endif
+//     Logger::Error("Unable to parse input file '" + filename + "'");
+//     return false;
+//   }
 
   if (no_progress)
   {
