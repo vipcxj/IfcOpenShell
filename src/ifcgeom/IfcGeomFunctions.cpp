@@ -950,6 +950,8 @@ bool IfcGeom::Kernel::convert_wire_to_face(const TopoDS_Wire &w, TopoDS_Face &fa
   TopExp_Explorer exp(wire, TopAbs_EDGE);
   for (; exp.More(); exp.Next())
   {
+
+
     double a, b;
     Handle(Geom_Curve) crv = BRep_Tool::Curve(TopoDS::Edge(exp.Current()), a, b);
     if (crv->DynamicType() != STANDARD_TYPE(Geom_Line))
@@ -971,9 +973,12 @@ bool IfcGeom::Kernel::convert_wire_to_face(const TopoDS_Wire &w, TopoDS_Face &fa
     ShapeFix_ShapeTolerance FTol;
     FTol.SetTolerance(wire, getValue(GV_PRECISION), TopAbs_WIRE);
   }
-
+  ////////////////////////////////////////////////////////////////////
+  //////////// this is where the cost is....
   BRepBuilderAPI_MakeFace mf(wire, false);
   BRepBuilderAPI_FaceError er = mf.Error();
+  ////////////////////////////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////
 
   if (er != BRepBuilderAPI_FaceDone)
   {
