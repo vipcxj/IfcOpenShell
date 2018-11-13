@@ -1,57 +1,56 @@
 /********************************************************************************
  *                                                                              *
- * This file is part of IfcOpenShell.                                           *
+ * This file is part of IfcOpenShell. *
  *                                                                              *
- * IfcOpenShell is free software: you can redistribute it and/or modify         *
- * it under the terms of the Lesser GNU General Public License as published by  *
- * the Free Software Foundation, either version 3.0 of the License, or          *
- * (at your option) any later version.                                          *
+ * IfcOpenShell is free software: you can redistribute it and/or modify * it
+ *under the terms of the Lesser GNU General Public License as published by  *
+ * the Free Software Foundation, either version 3.0 of the License, or * (at
+ *your option) any later version.                                          *
  *                                                                              *
- * IfcOpenShell is distributed in the hope that it will be useful,              *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of               *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the                 *
- * Lesser GNU General Public License for more details.                          *
+ * IfcOpenShell is distributed in the hope that it will be useful, * but WITHOUT
+ *ANY WARRANTY; without even the implied warranty of               *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the * Lesser GNU
+ *General Public License for more details.                          *
  *                                                                              *
- * You should have received a copy of the Lesser GNU General Public License     *
- * along with this program. If not, see <http://www.gnu.org/licenses/>.         *
+ * You should have received a copy of the Lesser GNU General Public License *
+ * along with this program. If not, see <http://www.gnu.org/licenses/>. *
  *                                                                              *
  ********************************************************************************/
 
 /********************************************************************************
  *                                                                              *
- * Geometrical data in an IFC file consists of shapes (IfcShapeRepresentation)  *
- * and instances (SUBTYPE OF IfcBuildingElement e.g. IfcWindow).                *
+ * Geometrical data in an IFC file consists of shapes (IfcShapeRepresentation) *
+ * and instances (SUBTYPE OF IfcBuildingElement e.g. IfcWindow). *
  *                                                                              *
- * IfcGeom::Representation::Triangulation is a class that represents a          *
- * triangulated IfcShapeRepresentation.                                         *
- *   Triangulation.verts is a 1 dimensional vector of float defining the        *
- *      cartesian coordinates of the vertices of the triangulated shape in the  *
- *      format of [x1,y1,z1,..,xn,yn,zn]                                        *
- *   Triangulation.faces is a 1 dimensional vector of int containing the        *
- *     indices of the triangles referencing positions in Triangulation.verts    *
- *   Triangulation.edges is a 1 dimensional vector of int in {0,1} that dictates*
- *	   the visibility of the edges that span the faces in Triangulation.faces   *
+ * IfcGeom::Representation::Triangulation is a class that represents a *
+ * triangulated IfcShapeRepresentation. * Triangulation.verts is a 1 dimensional
+ *vector of float defining the        * cartesian coordinates of the vertices of
+ *the triangulated shape in the  * format of [x1,y1,z1,..,xn,yn,zn] *
+ *   Triangulation.faces is a 1 dimensional vector of int containing the *
+ *     indices of the triangles referencing positions in Triangulation.verts *
+ *   Triangulation.edges is a 1 dimensional vector of int in {0,1} that
+ *dictates* the visibility of the edges that span the faces in
+ *Triangulation.faces   *
  *                                                                              *
- * IfcGeom::Element represents the actual IfcBuildingElements.                  *
- *   IfcGeomObject.name is the GUID of the element                              *
- *   IfcGeomObject.type is the datatype of the element e.g. IfcWindow           *
- *   IfcGeomObject.mesh is a pointer to an IfcMesh                              *
- *   IfcGeomObject.transformation.matrix is a 4x3 matrix that defines the       *
- *     orientation and translation of the mesh in relation to the world origin  *
+ * IfcGeom::Element represents the actual IfcBuildingElements. *
+ *   IfcGeomObject.name is the GUID of the element * IfcGeomObject.type is the
+ *datatype of the element e.g. IfcWindow           * IfcGeomObject.mesh is a
+ *pointer to an IfcMesh                              *
+ *   IfcGeomObject.transformation.matrix is a 4x3 matrix that defines the *
+ *     orientation and translation of the mesh in relation to the world origin *
  *                                                                              *
- * IfcGeom::Iterator::initialize()                                              *
- *   finds the most suitable representation contexts. Returns true iff          *
- *   at least a single representation will process successfully                 *
+ * IfcGeom::Iterator::initialize() * finds the most suitable representation
+ *contexts. Returns true iff          * at least a single representation will
+ *process successfully                 *
  *                                                                              *
- * IfcGeom::Iterator::get()                                                     *
- *   returns a pointer to the current IfcGeom::Element                          *
+ * IfcGeom::Iterator::get() * returns a pointer to the current IfcGeom::Element
+ **
  *                                                                              *
- * IfcGeom::Iterator::next()                                                    *
- *   returns true iff a following entity is available for a successive call to  *
- *   IfcGeom::Iterator::get()                                                   *
+ * IfcGeom::Iterator::next() * returns true iff a following entity is available
+ *for a successive call to  * IfcGeom::Iterator::get() *
  *                                                                              *
- * IfcGeom::Iterator::progress()                                                *
- *   returns an int in [0..100] that indicates the overall progress             *
+ * IfcGeom::Iterator::progress() * returns an int in [0..100] that indicates the
+ *overall progress             *
  *                                                                              *
  ********************************************************************************/
 
@@ -82,7 +81,8 @@
 #include "../ifcgeom/IfcGeomMaterial.h"
 #include "../ifcgeom/IfcRepresentationShapeItem.h"
 
-// The infamous min & max Win32 #defines can leak here from OCE depending on the build configuration
+// The infamous min & max Win32 #defines can leak here from OCE depending on the
+// build configuration
 #ifdef min
 #undef min
 #endif
@@ -132,18 +132,24 @@ public:
     {
       delete ifc_file;
     }
-
     free_shapes();
   }
 
-  ///////////////// Initialize is called on the constructed object to set things in motion.
+  IfcSchema::IfcRepresentation::list::ptr representations;
+
+  // NOTE(Sander): could be a list, as per this post:
+  // https://stackoverflow.com/questions/2209224/vector-vs-list-in-stl#2209564
+  std::vector<Result> Results;
+
+  ///////////////// Initialize is called on the constructed object to set things
+  /// in motion.
   // NB:
   // initUnits() copied in.
   bool initialize()
   {
+    // initUnits();
     try
     {
-      // initUnits();
       IfcSchema::IfcProject::list::ptr projects = ifc_file->entitiesByType<IfcSchema::IfcProject>();
       if (projects->size() == 1)
       {
@@ -232,8 +238,9 @@ public:
       }
     }
 
-    // In case no contexts are identified based on their ContextType, all contexts are
-    // considered. Note that sub contexts are excluded as they are considered later on.
+    // In case no contexts are identified based on their ContextType, all
+    // contexts are considered. Note that sub contexts are excluded as they are
+    // considered later on.
     if (filtered_contexts->size() == 0)
     {
       for (it = contexts->begin(); it != contexts->end(); ++it)
@@ -269,14 +276,15 @@ public:
       {
         representations->push((*jt)->RepresentationsInContext());
       }
-      // There is no need for full recursion as the following is governed by the schema:
-      // WR31: The parent context shall not be another geometric representation sub context.
+      // There is no need for full recursion as the following is governed by the
+      // schema: WR31: The parent context shall not be another geometric
+      // representation sub context.
     }
 
     if (any_precision_encountered)
     {
-      // Some arbitrary factor that has proven to work better for the models in the set of test
-      // files.
+      // Some arbitrary factor that has proven to work better for the models in
+      // the set of test files.
       lowest_precision_encountered *= 10.;
       lowest_precision_encountered *= unit_magnitude;
       if (lowest_precision_encountered < 1.e-7)
@@ -303,10 +311,10 @@ public:
     representation_iterator = representations->begin();
     ifcproducts.reset();
 
-    if (!create())
-    {
-      return false;
-    }
+    // if (!create())
+    // {
+    //   return false;
+    // }
 
     done = 0;
     total = representations->size();
@@ -314,14 +322,68 @@ public:
     return true;
   } // initialize
 
+  void dispatch_conversion()
+  {
+    const unsigned int num_threads = std::thread::hardware_concurrency();
+    Logger::Status("amount of threads available for use on this machine: " +
+                   std::to_string(num_threads));
 
-bool create(data, &result)
+    std::vector<std::future<void>> threadpool;
+    count = 0;
+    bool all_done = false;
+
+    while (!all_done)
+    {
+      if (threadpool.size() < num_threads)
+      {
+        Result r;
+        r.index = 0;
+        r.triangulation = 0;
+        r.shape_model = 0;
+        r.serialization = 0;
+        Results.emplace_back(r);
+        std::future<void> fu =
+            std::async(std::launch::async, create, data, std::ref(Results.back()));
+        threadpool.emplace_back(std::move(fu));
+        j++;
+      }
+      else
+      {
+        bool waiting = true;
+        while (waiting)
+        {
+          for (int i = 0; i < threadpool.size(); i++)
+          {
+            std::future<void> &fu = threadpool[i];
+            std::future_status status;
+            status = fu.wait_for(std::chrono::seconds(0));
+            if (status == std::future_status::ready)
+            {
+              fu.get();
+              threadpool.erase(threadpool.begin() + i);
+              waiting = false;
+            } // if
+          }   // for
+        }     // while
+      }       // else
+    }
+
+    // wait for the last threads to finish:
+    for (std::future<void> &fu : threadpool)
+    {
+      fu.get();
+    }
+
+    all_done = true;
+    ;
+  }
+
+  bool create(Data data, Result &result)
   {
     // NOTES:
     // settings.. keep global or wrap ?
-  // returns a product that is not used in IfcConvert, geomserver ?
-  // IfcSchema::IfcProduct *create()
-
+    // returns a product that is not used in IfcConvert, geomserver ?
+    // IfcSchema::IfcProduct *create()
 
     // IfcGeom::BRepElement<P> *next_shape_model = 0;
     // IfcGeom::SerializedElement<P> *next_serialization = 0;
@@ -330,7 +392,7 @@ bool create(data, &result)
     result.serialization = 0;
     result.triangulation = 0;
 
-  try
+    try
     {
       result.shape_model = _create_shape_model();
     }
@@ -398,6 +460,74 @@ bool create(data, &result)
     return next_shape_model ? true : false;
   }
 
+  /// Computes model's bounding box (bounds_min and bounds_max).
+  /// @note Can take several minutes for large files.
+  void compute_bounds()
+  {
+    for (int i = 1; i < 4; ++i)
+    {
+      bounds_min_.SetCoord(i, std::numeric_limits<double>::infinity());
+      bounds_max_.SetCoord(i, -std::numeric_limits<double>::infinity());
+    }
+
+    IfcSchema::IfcProduct::list::ptr products = ifc_file->entitiesByType<IfcSchema::IfcProduct>();
+    for (IfcSchema::IfcProduct::list::it iter = products->begin(); iter != products->end(); ++iter)
+    {
+      IfcSchema::IfcProduct *product = *iter;
+      if (product->hasObjectPlacement())
+      {
+        // Use a fresh trsf every time in order to prevent the result to be
+        // concatenated
+        gp_Trsf trsf;
+        bool success = false;
+        try
+        {
+          success = kernel.convert(product->ObjectPlacement(), trsf);
+        }
+        catch (const std::exception &e)
+        {
+          Logger::Error(e);
+        }
+        catch (...)
+        {
+          Logger::Error("Failed to construct placement");
+        }
+        if (!success)
+        {
+          continue;
+        }
+        const gp_XYZ &pos = trsf.TranslationPart();
+        bounds_min_.SetX(std::min(bounds_min_.X(), pos.X()));
+        bounds_min_.SetY(std::min(bounds_min_.Y(), pos.Y()));
+        bounds_min_.SetZ(std::min(bounds_min_.Z(), pos.Z()));
+        bounds_max_.SetX(std::max(bounds_max_.X(), pos.X()));
+        bounds_max_.SetY(std::max(bounds_max_.Y(), pos.Y()));
+        bounds_max_.SetZ(std::max(bounds_max_.Z(), pos.Z()));
+      }
+    }
+  }
+
+  ///////////////// Getters
+
+  int progress() const { return 100 * done / total; }
+
+  const std::string &getUnitName() const { return unit_name; }
+
+  /// @note Double always as per IFC specification.
+  double getUnitMagnitude() const { return unit_magnitude; }
+
+  std::string getLog() const { return Logger::GetLog(); }
+
+  IfcParse::IfcFile *getFile() const { return ifc_file; }
+
+  const std::vector<IfcGeom::filter_t> &filters() const { return filters_; }
+
+  std::vector<IfcGeom::filter_t> &filters() { return filters_; }
+
+  const gp_XYZ &bounds_min() const { return bounds_min_; }
+
+  const gp_XYZ &bounds_max() const { return bounds_max_; }
+
 private:
   //////////////////////////// INIT
   std::string unit_name; // _pre_init & Initialize
@@ -424,16 +554,28 @@ private:
   IfcSchema::IfcRepresentation::list::ptr ok_mapped_representations;
 
   //////////////////////////// RESULT
-  TriangulationElement<P> *current_triangulation;
-  BRepElement<P> *current_shape_model;
-  SerializedElement<P> *current_serialization;
+  // TriangulationElement<P> *current_triangulation;
+  // BRepElement<P> *current_shape_model;
+  // SerializedElement<P> *current_serialization;
 
-  struct result
+  struct Result
   {
+    int index;
     TriangulationElement<P> *triangulation;
     BRepElement<P> *shape_model;
     SerializedElement<P> *serialization;
   };
+
+struct Data
+{
+ IteratorSettings settings;
+  IfcParse::IfcFile *ifc_file;
+  bool owns_ifc_file;
+  IfcSchema::IfcProduct::list::ptr ifcproducts;
+  std::vector<filter_t> filters_;
+  bool geometry_reuse_ok_for_current_representation_;
+  IfcSchema::IfcRepresentation::list::ptr ok_mapped_representations;
+};
 
   void _pre_init()
   {
@@ -452,8 +594,8 @@ private:
     {
       if (settings.get(IteratorSettings::SITE_LOCAL_PLACEMENT))
       {
-        Logger::Message(Logger::LOG_WARNING,
-                        "building-local-placement takes precedence over site-local-placement");
+        Logger::Message(Logger::LOG_WARNING, "building-local-placement takes precedence over "
+                                             "site-local-placement");
       }
       kernel.set_conversion_placement_rel_to(IfcSchema::Type::IfcBuilding);
     }
@@ -464,13 +606,13 @@ private:
   } // preinit
 
   // TODO: refactor
-// representation_iterator
-// representations
-// ifcproducts
-// kernel.products_represented_by(representation); 
-// geometry_reuse_ok_for_current_representation_ = reuse_ok_( ... );
+  // representation_iterator
+  // representations
+  // ifcproducts
+  // kernel.products_represented_by(representation);
+  // geometry_reuse_ok_for_current_representation_ = reuse_ok_( ... );
 
-BRepElement<P> *_create_shape_model()
+  BRepElement<P> *_create_shape_model()
   {
 
     for (;;)
@@ -498,13 +640,15 @@ BRepElement<P> *_create_shape_model()
 
         if (!geometry_reuse_ok_for_current_representation_ && maps->size() == 1)
         {
-          // unfiltered_products contains products represented by this representation by means of
-          // mapped items. For example because of openings applied to products, reuse might not be
-          // acceptable and then the products will be processed by means of their immediate
+          // unfiltered_products contains products represented by this
+          // representation by means of mapped items. For example because of
+          // openings applied to products, reuse might not be acceptable and then
+          // the products will be processed by means of their immediate
           // representation and not the mapped representation.
 
-          // IfcRepresentationMaps are also used for IfcTypeProducts, so an additional check is
-          // performed whether the map is indeed used by IfcMappedItems.
+          // IfcRepresentationMaps are also used for IfcTypeProducts, so an
+          // additional check is performed whether the map is indeed used by
+          // IfcMappedItems.
           IfcSchema::IfcRepresentationMap *map = *maps->begin();
           if (map->MapUsage()->size() > 0)
           {
@@ -519,8 +663,8 @@ BRepElement<P> *_create_shape_model()
             kernel.representation_mapped_to(representation);
         if (representation_mapped_to)
         {
-          // Check if this representation has (or will be) processed as part its mapped
-          // representation
+          // Check if this representation has (or will be) processed as part its
+          // mapped representation
           representation_processed_as_mapped_item =
               ok_mapped_representations->contains(representation_mapped_to) ||
               reuse_ok_(kernel.products_represented_by(representation_mapped_to));
@@ -533,8 +677,8 @@ BRepElement<P> *_create_shape_model()
           continue;
         }
 
-        // Filter the products based on the set of entities and/or names being included or excluded
-        // for processing.
+        // Filter the products based on the set of entities and/or names being
+        // included or excluded for processing.
         for (IfcSchema::IfcProduct::list::it jt = unfiltered_products->begin();
              jt != unfiltered_products->end(); ++jt)
         {
@@ -555,8 +699,8 @@ BRepElement<P> *_create_shape_model()
         continue;
       }
 
- /////////////////////////////////////////////////////
- /////////////////////////////////////////////////////
+      /////////////////////////////////////////////////////
+      /////////////////////////////////////////////////////
 
       IfcSchema::IfcProduct *product = *ifcproduct_iterator;
       Logger::SetProduct(product);
@@ -583,14 +727,14 @@ BRepElement<P> *_create_shape_model()
       }
       return element;
 
- /////////////////////////////////////////////////////
- /////////////////////////////////////////////////////
+      /////////////////////////////////////////////////////
+      /////////////////////////////////////////////////////
 
     } // for(;;)
 
   } //_create_shape_model
 
-} // class Iterator
+} // namespace IfcGeom
 } // namespace IfcGeom
 
 #endif

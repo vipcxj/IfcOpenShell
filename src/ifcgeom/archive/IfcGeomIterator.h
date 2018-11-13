@@ -284,7 +284,6 @@ public:
         // Use a fresh trsf every time in order to prevent the result to be concatenated
         gp_Trsf trsf;
         bool success = false;
-
         try
         {
           success = kernel.convert(product->ObjectPlacement(), trsf);
@@ -297,12 +296,10 @@ public:
         {
           Logger::Error("Failed to construct placement");
         }
-
         if (!success)
         {
           continue;
         }
-
         const gp_XYZ &pos = trsf.TranslationPart();
         bounds_min_.SetX(std::min(bounds_min_.X(), pos.X()));
         bounds_min_.SetY(std::min(bounds_min_.Y(), pos.Y()));
