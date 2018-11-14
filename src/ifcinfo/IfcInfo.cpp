@@ -19,7 +19,7 @@
 
 /********************************************************************************
  *                                                                              *
- * This started as a brief example of how IfcOpenShell can be interfaced from   * 
+ * This started as a brief example of how IfcOpenShell can be interfaced from   *
  * within a C++ context, it has since then evolved into a fullfledged command   *
  * line application that is able to convert geometry in an IFC files into       *
  * several tesselated and topological output formats.                           *
@@ -33,122 +33,110 @@
 // #include "../ifcconvert/XmlSerializer.h"
 // #include "../ifcconvert/SvgSerializer.h"
 
-// #include "../ifcgeom/IfcGeomIterator.h"
-
 // #include <IGESControl_Controller.hxx>
 #include <Standard_Version.hxx>
+#include <algorithm>
+#include <limits>
 #include <map>
 #include <set>
 #include <vector>
-#include <limits>
-#include <algorithm>
 
 #include <boost/algorithm/string.hpp>
 
-#include <boost/program_options.hpp>
-#include "../ifcparse/IfcFile.h"
 #include "../ifcgeom/IfcGeom.h"
 #include "../ifcgeom/IfcGeomElement.h"
-#include "../ifcgeom/IfcGeomMaterial.h"
-#include "../ifcgeom/IfcGeomIteratorSettings.h"
-#include "../ifcgeom/IfcRepresentationShapeItem.h"
 #include "../ifcgeom/IfcGeomFilter.h"
+#include "../ifcgeom/IfcGeomIterator.h"
+#include "../ifcgeom/IfcGeomIteratorSettings.h"
+#include "../ifcgeom/IfcGeomMaterial.h"
+#include "../ifcgeom/IfcRepresentationShapeItem.h"
+#include "../ifcparse/IfcFile.h"
 
 #include <fstream>
-#include <sstream>
 #include <set>
+#include <sstream>
 #include <time.h>
 
-namespace po = boost::program_options;
+#if USE_VLD
+#include <vld.h>
+#endif
 
-void print_version()
+using namespace IfcSchema;
+int main(int argc, char** argv) 
 {
-    std::cout << "IfcOpenShell "
-              << IfcSchema::Identifier
-              << " IfcConvert "
-              << IFCOPENSHELL_VERSION
-              << " (OCC "
-              << OCC_VERSION_STRING_EXT
-              << ")\n";
-}
 
-void print_usage(bool t_suggest_help = true)
-{
-  std::cout << "Usage: IfcInfo [options] <input.ifc>\n"
-            << "\n"
-            << "Displays the geometry in an IFC file.\n";
-  if (t_suggest_help) {
-    std::cout << "\nRun 'IfcInfo --help' for more information.";
-  }
-  std::cout << std::endl;
-}
-
-/// @todo Add help for single option
-void print_options(const po::options_description& options)
-{
-    std::cout << "\n" << options;
-    std::cout << std::endl;
-}
-
-bool file_exists(const std::string& filename)
-{
-    /// @todo Windows Unicode support
-    std::ifstream file(filename.c_str());
-    return file.good();
-}
-
-// bool init_input_file(const std::string& filename, IfcParse::IfcFile& ifc_file, bool no_progress, bool mmap);
-
-int main(int ac, char** av)
-{
-  
-  print_version();
-  po::options_description desc("Allowed options");
-  desc.add_options()
-      ("help", "produce help message")
-      ("y", "yes on all")
-      ("input-file", po::value<std::string>(), "input file");
-
-  po::positional_options_description positional_options;
-  positional_options.add("input-file", -1);
-
-  po::variables_map vm;
-  po::store(po::command_line_parser(ac, av).
-            options(desc).positional(positional_options).run(), vm);
-  
-  po::notify(vm);
-
-  if(vm.count("help"))
+  if (argc != 2)
   {
-    std::cout << "help: \n"
-              << desc << std::endl;
-    return EXIT_SUCCESS;
-  }else if (!vm.count("input-file"))
+    std::cout << "usage: IfcParseExamples <filename.ifc>" << std::endl;
+    return 1;
+  }
+
+  // Redirect the output (both progress and log) to stdout
+  Logger::SetOutput(&std::cout, &std::cout);
+
+  // Parse the IFC file provided in argv[1]
+  IfcParse::IfcFile file;
+  if (!file.Init(argv[1]))
   {
-    std::cerr << "[Error] Input file not specified" << std::endl;
-    std::cout << desc << std::endl;
-    return EXIT_FAILURE;
+    std::cout << "Unable to parse .ifc file" << std::endl;
+    return 1;
   }
 
-  const std::string input_filename = vm["input-file"].as<std::string>();
-  if (!file_exists(input_filename)) {
-    std::cerr << "[Error] Input file '" << input_filename << "' does not exist" << std::endl;
-    return EXIT_FAILURE;
-  }
-  std::cout << "input file: " << input_filename << std::endl;
-  IfcParse::IfcFile ifc_file;
-  
-  
-  if (!ifc_file.Init(input_filename)) {
-    Logger::Error("Unable to parse input file '" + input_filename + "'");
-    return EXIT_FAILURE;
-  }
-  //if (no_progress) { Logger::SetOutput(&std::cout, &log_stream); }
+  // Lets get a list of IfcBuildingElements, this is the parent
+  // type of things like walls, windows and doors.
+  // entitiesByType is a templated function and returns a
+  // templated class that behaves like a std::vector.
+  // Note that the return types are all typedef'ed as members of
+  // the generated classes, ::list for the templated vector class,
+  // ::ptr for a shared pointer and ::it for an iterator.
+  // We will simply iterate over the vector and print a string
+  // representation of the entity to stdout.
+  //
+  // Secondly, lets find out which of them are IfcWindows.
+  // In order to access the additional properties that windows
+  // have on top af the properties of building elements,
+  // we need to cast them to IfcWindows. Since these properties
+  // are optional we need to make sure the properties are
+  // defined for the window in question before accessing them.
 
-    // for ( const auto &myPair : ifc_file.entities_by_type_t ) {
-    //     std::cout << myPair->first << "\n";
+  // IfcBuildingElement::list::ptr elements = file.entitiesByType<IfcBuildingElement>();
+
+  // std::cout << "Found " << elements->size() << " elements in " << argv[1] << ":" << std::endl;
+
+  // for (IfcBuildingElement::list::it it = elements->begin(); it != elements->end(); ++it)
+  // {
+  //   const IfcBuildingElement *element = *it;
+  //   std::cout << element->entity->toString() << std::endl;
+  //   if (element->is(IfcWindow::Class()))
+  //   {
+  //     const IfcWindow *window = (IfcWindow *)element;
+  //     if (window->hasOverallWidth() && window->hasOverallHeight())
+  //     {
+  //       const double area = window->OverallWidth() * window->OverallHeight();
+  //       std::cout << "The area of this window is " << area << std::endl;
+  //     }
+  //   }
+  // }
+
+  IfcProduct::list::ptr products = file.entitiesByType<IfcProduct>();
+
+  std::cout << "Found " << products->size() << " products in " << argv[1] << ":" << std::endl;
+
+  for (IfcProduct::list::it it = products->begin(); it != products->end(); ++it)
+  {
+    const IfcProduct *product = *it;
+    std::cout << product->entity->toString() << std::endl;
+    // if (element->is(IfcWindow::Class()))
+    // {
+    //   const IfcWindow *window = (IfcWindow *)element;
+    //   if (window->hasOverallWidth() && window->hasOverallHeight())
+    //   {
+    //     const double area = window->OverallWidth() * window->OverallHeight();
+    //     std::cout << "The area of this window is " << area << std::endl;
+    //   }
     // }
+  }
 
-  
+
   return 1;
 }
