@@ -30,8 +30,9 @@
 // #include "../ifcconvert/IgesSerializer.h"
 // #include "../ifcconvert/StepSerializer.h"
 // #include "../ifcconvert/WavefrontObjSerializer.h"
-// #include "../ifcconvert/XmlSerializer.h"
 // #include "../ifcconvert/SvgSerializer.h"
+// #include "../ifcconvert/XmlSerializer.h"
+#include "../ifcconvert/GeometrySerializer.h"
 
 // #include <IGESControl_Controller.hxx>
 #include <Standard_Version.hxx>
@@ -62,81 +63,431 @@
 #endif
 
 using namespace IfcSchema;
-int main(int argc, char** argv) 
-{
 
+bool reuse_ok_(SerializerSettings settings, const IfcSchema::IfcProduct::list::ptr &products)
+  {
+    IfcGeom::Kernel kernel;
+    
+    // With world coords enabled, object transformations are directly applied to
+    // the BRep. There is no way to re-use the geometry for multiple products.
+    if (settings.get(IfcGeom::IteratorSettings::USE_WORLD_COORDS))
+    {
+      return false;
+    }
+
+    std::set<const IfcSchema::IfcMaterial *> associated_single_materials;
+
+    for (IfcSchema::IfcProduct::list::it it = products->begin(); it != products->end(); ++it)
+    {
+      IfcSchema::IfcProduct *product = *it;
+      if (!settings.get(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS) &&
+          kernel.find_openings(product)->size())
+      {
+        return false;
+      }
+      if (settings.get(IfcGeom::IteratorSettings::APPLY_LAYERSETS))
+      {
+        IfcSchema::IfcRelAssociates::list::ptr associations = product->HasAssociations();
+        for (IfcSchema::IfcRelAssociates::list::it jt = associations->begin();
+             jt != associations->end(); ++jt)
+        {
+          IfcSchema::IfcRelAssociatesMaterial *assoc =
+              (*jt)->as<IfcSchema::IfcRelAssociatesMaterial>();
+          if (assoc)
+          {
+            if (assoc->RelatingMaterial()->is(IfcSchema::Type::IfcMaterialLayerSetUsage))
+            {
+              // TODO: Check whether single layer?
+              return false;
+            }
+          }
+        }
+      }
+      // Note that this can be a nullptr (!), but the fact that set size should be one still holds
+      associated_single_materials.insert(kernel.get_single_material_association(product));
+      if (associated_single_materials.size() > 1)
+        return false;
+    }
+    return associated_single_materials.size() == 1;
+  }
+
+int main(int argc, char **argv)
+{
+std::chrono::time_point<std::chrono::system_clock> start, end; 
   if (argc != 2)
   {
     std::cout << "usage: IfcParseExamples <filename.ifc>" << std::endl;
     return 1;
   }
-
   // Redirect the output (both progress and log) to stdout
   Logger::SetOutput(&std::cout, &std::cout);
-
   // Parse the IFC file provided in argv[1]
-  IfcParse::IfcFile file;
-  if (!file.Init(argv[1]))
+  Logger::Status("Ifc_File.Init");
+  start = std::chrono::system_clock::now(); 
+  IfcParse::IfcFile ifc_file;
+  if (!ifc_file.Init(argv[1]))
   {
     std::cout << "Unable to parse .ifc file" << std::endl;
     return 1;
   }
+  end = std::chrono::system_clock::now(); 
+  std::chrono::duration<double> elapsed_seconds = end - start; 
+  Logger::Status("Ifc_File.Init duration: "+std::to_string(elapsed_seconds.count() ));
 
-  // Lets get a list of IfcBuildingElements, this is the parent
-  // type of things like walls, windows and doors.
-  // entitiesByType is a templated function and returns a
-  // templated class that behaves like a std::vector.
-  // Note that the return types are all typedef'ed as members of
-  // the generated classes, ::list for the templated vector class,
-  // ::ptr for a shared pointer and ::it for an iterator.
-  // We will simply iterate over the vector and print a string
-  // representation of the entity to stdout.
-  //
-  // Secondly, lets find out which of them are IfcWindows.
-  // In order to access the additional properties that windows
-  // have on top af the properties of building elements,
-  // we need to cast them to IfcWindows. Since these properties
-  // are optional we need to make sure the properties are
-  // defined for the window in question before accessing them.
+  SerializerSettings settings;
+  /// @todo Make APPLY_DEFAULT_MATERIALS configurable? Quickly tested setting this to false and
+  /// using obj exporter caused the program to crash and burn.
+  settings.set(IfcGeom::IteratorSettings::APPLY_DEFAULT_MATERIALS, true);
+  settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS, true);
+  settings.set(IfcGeom::IteratorSettings::WELD_VERTICES, true);
+  settings.set(IfcGeom::IteratorSettings::SEW_SHELLS, true);
+  settings.set(IfcGeom::IteratorSettings::CONVERT_BACK_UNITS, true);
+#if OCC_VERSION_HEX < 0x60900
+  settings.set(IfcGeom::IteratorSettings::FASTER_BOOLEANS, true);
+#endif
+  settings.set(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS, true);
+  settings.set(IfcGeom::IteratorSettings::INCLUDE_CURVES, false);
+  settings.set(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES, true);
+  settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS, true);
+  settings.set(IfcGeom::IteratorSettings::NO_NORMALS, false);
+  settings.set(IfcGeom::IteratorSettings::GENERATE_UVS, true);
+  settings.set(IfcGeom::IteratorSettings::SEARCH_FLOOR, true);
+  settings.set(IfcGeom::IteratorSettings::SITE_LOCAL_PLACEMENT, true);
+  settings.set(IfcGeom::IteratorSettings::BUILDING_LOCAL_PLACEMENT, true);
+  settings.set(SerializerSettings::USE_ELEMENT_NAMES, true);
+  settings.set(SerializerSettings::USE_ELEMENT_GUIDS, true);
+  settings.set(SerializerSettings::USE_MATERIAL_NAMES, true);
+  settings.set(SerializerSettings::USE_ELEMENT_TYPES, true);
+  settings.set(SerializerSettings::USE_ELEMENT_HIERARCHY, true);
+  settings.set_deflection_tolerance(0.001);
+  settings.precision = 7;
 
-  // IfcBuildingElement::list::ptr elements = file.entitiesByType<IfcBuildingElement>();
-
-  // std::cout << "Found " << elements->size() << " elements in " << argv[1] << ":" << std::endl;
-
-  // for (IfcBuildingElement::list::it it = elements->begin(); it != elements->end(); ++it)
-  // {
-  //   const IfcBuildingElement *element = *it;
-  //   std::cout << element->entity->toString() << std::endl;
-  //   if (element->is(IfcWindow::Class()))
-  //   {
-  //     const IfcWindow *window = (IfcWindow *)element;
-  //     if (window->hasOverallWidth() && window->hasOverallHeight())
-  //     {
-  //       const double area = window->OverallWidth() * window->OverallHeight();
-  //       std::cout << "The area of this window is " << area << std::endl;
-  //     }
-  //   }
-  // }
-
-  IfcProduct::list::ptr products = file.entitiesByType<IfcProduct>();
-
-  std::cout << "Found " << products->size() << " products in " << argv[1] << ":" << std::endl;
-
-  for (IfcProduct::list::it it = products->begin(); it != products->end(); ++it)
+  std::set<std::string> allowed_context_types;
+  allowed_context_types.insert("model");
+  allowed_context_types.insert("plan");
+  allowed_context_types.insert("notdefined");
+  std::set<std::string> context_types;
+  if (!settings.get(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES))
   {
-    const IfcProduct *product = *it;
-    std::cout << product->entity->toString() << std::endl;
-    // if (element->is(IfcWindow::Class()))
-    // {
-    //   const IfcWindow *window = (IfcWindow *)element;
-    //   if (window->hasOverallWidth() && window->hasOverallHeight())
-    //   {
-    //     const double area = window->OverallWidth() * window->OverallHeight();
-    //     std::cout << "The area of this window is " << area << std::endl;
-    //   }
-    // }
+    context_types.insert("model");
+    context_types.insert("design");
+    context_types.insert("model view");
+    context_types.insert("detail view");
+  }
+  if (settings.get(IfcGeom::IteratorSettings::INCLUDE_CURVES))
+  {
+    context_types.insert("plan");
   }
 
+  double lowest_precision_encountered = std::numeric_limits<double>::infinity();
+  bool any_precision_encountered = false;
+
+  IfcSchema::IfcRepresentation::list::ptr representations =
+      IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
+  IfcSchema::IfcRepresentation::list::it representation_iterator;
+  IfcSchema::IfcRepresentation::list::ptr ok_mapped_representations;
+  IfcSchema::IfcGeometricRepresentationContext::list::ptr contexts =
+      ifc_file.entitiesByType<IfcSchema::IfcGeometricRepresentationContext>();
+  IfcSchema::IfcGeometricRepresentationContext::list::ptr filtered_contexts(
+      new IfcSchema::IfcGeometricRepresentationContext::list);
+  IfcSchema::IfcGeometricRepresentationContext::list::it it;
+  IfcSchema::IfcGeometricRepresentationSubContext::list::it jt;
+
+  ////////////////////////////////////////////////////////////
+  ///////////////////////// filter contexts for representations
+  ////////////////////////////////////////////////////////////
+  Logger::Status("go through contexts");
+  start = std::chrono::system_clock::now(); 
+  for (it = contexts->begin(); it != contexts->end(); ++it)
+  {
+    IfcSchema::IfcGeometricRepresentationContext *context = *it;
+    if (context->is(IfcSchema::Type::IfcGeometricRepresentationSubContext))
+    {
+      // Continue, as the list of subcontexts will be considered
+      // by the parent's context inverse attributes.
+      continue;
+    }
+    try
+    {
+      if (context->hasContextType())
+      {
+        std::string context_type = context->ContextType();
+        boost::to_lower(context_type);
+        if (allowed_context_types.find(context_type) == allowed_context_types.end())
+        {
+          Logger::Message(Logger::LOG_ERROR,
+                          std::string("ContextType '") + context->ContextType() + "' not allowed:",
+                          context->entity);
+        }
+        if (context_types.find(context_type) != context_types.end())
+        {
+          filtered_contexts->push(context);
+        }
+      }
+    }
+    catch (const std::exception &e)
+    {
+      Logger::Error(e);
+    }
+  }
+
+  // In case no contexts are identified based on their ContextType, all contexts are
+  // considered. Note that sub contexts are excluded as they are considered later on.
+  if (filtered_contexts->size() == 0)
+  {
+    Logger::Status("no filtered contexts, all contexts are considered..");
+    for (it = contexts->begin(); it != contexts->end(); ++it)
+    {
+      IfcSchema::IfcGeometricRepresentationContext *context = *it;
+      if (!context->is(IfcSchema::Type::IfcGeometricRepresentationSubContext))
+      {
+        filtered_contexts->push(context);
+      }
+    }
+  }
+  end = std::chrono::system_clock::now(); 
+  elapsed_seconds = end - start; 
+  Logger::Status("context duration: "+std::to_string(elapsed_seconds.count() ));
+
+  Logger::Status("Iterate over filtered_contexts ... ");
+  start = std::chrono::system_clock::now(); 
+  for (it = filtered_contexts->begin(); it != filtered_contexts->end(); ++it)
+  {
+    IfcSchema::IfcGeometricRepresentationContext *context = *it;
+    representations->push(context->RepresentationsInContext());
+    try
+    {
+      if (context->hasPrecision() && context->Precision() < lowest_precision_encountered)
+      {
+        lowest_precision_encountered = context->Precision();
+        any_precision_encountered = true;
+      }
+    }
+    catch (const std::exception &e)
+    {
+      Logger::Error(e);
+    }
+    IfcSchema::IfcGeometricRepresentationSubContext::list::ptr sub_contexts =
+        context->HasSubContexts();
+    for (jt = sub_contexts->begin(); jt != sub_contexts->end(); ++jt)
+    {
+      representations->push((*jt)->RepresentationsInContext());
+    }
+    // There is no need for full recursion as the following is governed by the schema:
+    // WR31: The parent context shall not be another geometric representation sub context.
+  }
+  end = std::chrono::system_clock::now(); 
+  elapsed_seconds = end - start; 
+  Logger::Status("filtered_context duration: "+std::to_string(elapsed_seconds.count() ));
+
+  ////////////////////////////////////////////////////////////
+  /////// representations filled, now set units and precision
+  ////////////////////////////////////////////////////////////
+  IfcGeom::Kernel kernel;
+  // initUnits()
+  IfcSchema::IfcProject::list::ptr projects = ifc_file.entitiesByType<IfcSchema::IfcProject>();
+  std::string unit_name;
+  double unit_magnitude;
+  unit_name = "METER";
+  unit_magnitude = 1.f;
+  if (projects->size() == 1)
+  {
+    IfcSchema::IfcProject *project = *projects->begin();
+    std::pair<std::string, double> length_unit =
+        kernel.initializeUnits(project->UnitsInContext());
+    unit_name = length_unit.first;
+    unit_magnitude = length_unit.second;
+  }
+  else
+  {
+    Logger::Error("A single IfcProject is expected (encountered " +
+                  boost::lexical_cast<std::string>(projects->size()) +
+                  "); unable to read unit information.");
+  }
+  if (any_precision_encountered)
+  {
+    // Some arbitrary factor that has proven to work better for the models in the set of test
+    // files.
+    lowest_precision_encountered *= 10.;
+    lowest_precision_encountered *= unit_magnitude;
+    if (lowest_precision_encountered < 1.e-7)
+    {
+      Logger::Message(Logger::LOG_WARNING, "Precision lower than 0.0000001 meter not enforced");
+      kernel.setValue(IfcGeom::Kernel::GV_PRECISION, 1.e-7);
+    }
+    else
+    {
+      kernel.setValue(IfcGeom::Kernel::GV_PRECISION, lowest_precision_encountered);
+    }
+  }
+  else
+  {
+    kernel.setValue(IfcGeom::Kernel::GV_PRECISION, 1.e-5);
+  }
+
+  if (representations->size() == 0)
+  {
+    Logger::Message(Logger::LOG_ERROR, "No geometries found");
+    return false;
+  }
+
+  ////////////////////////////////////////////////////////////
+  /////// find products associated with representations (... ?)
+  ////////////////////////////////////////////////////////////
+  IfcSchema::IfcProduct::list::ptr ifcproducts;
+  IfcSchema::IfcProduct::list::it ifcproduct_iterator;
+  std::vector<IfcGeom::filter_t> filters_;
+
+  IfcGeom::layer_filter layer_filter;
+  IfcGeom::entity_filter entity_filter;
+  IfcGeom::string_arg_filter guid_filter(IfcSchema::Type::IfcRoot, 0);
+  IfcGeom::string_arg_filter name_filter(IfcSchema::Type::IfcRoot, 2);
+  IfcGeom::string_arg_filter desc_filter(IfcSchema::Type::IfcRoot, 3);
+  IfcGeom::string_arg_filter tag_filter(IfcSchema::Type::IfcProxy, 8, IfcSchema::Type::IfcElement, 7);
+  filters_.emplace_back(boost::ref( layer_filter));
+  filters_.emplace_back(boost::ref( entity_filter));
+  filters_.emplace_back(boost::ref( guid_filter ));
+  filters_.emplace_back(boost::ref( name_filter));
+  filters_.emplace_back(boost::ref( desc_filter));
+  filters_.emplace_back(boost::ref( tag_filter ));
+  bool geometry_reuse_ok_for_current_representation_;
+
+  // functor
+  struct filter_match
+  {
+    filter_match(IfcSchema::IfcProduct *prod) : product(prod) {}
+    bool operator()(const IfcGeom::filter_t &filter) const { return filter(product); }
+    IfcSchema::IfcProduct *product;
+  };
+
+  int count=0;
+  start = std::chrono::system_clock::now();  
+  for( representation_iterator = representations->begin();
+       representation_iterator != representations->end();
+       representation_iterator ++)
+  {
+    bool all_done=false;
+    while (!all_done)
+    {
+      Logger::Status("count: "+std::to_string(count));
+      IfcSchema::IfcRepresentation *representation = *representation_iterator;
+
+      // Has the list of IfcProducts for this representation been initialized?
+      if (!ifcproducts)
+      {
+      Logger::Status("1 ");
+        ifcproducts = IfcSchema::IfcProduct::list::ptr(new IfcSchema::IfcProduct::list);
+        IfcSchema::IfcProduct::list::ptr unfiltered_products =
+            kernel.products_represented_by(representation);
+        geometry_reuse_ok_for_current_representation_ = reuse_ok_(settings, unfiltered_products);
+        IfcSchema::IfcRepresentationMap::list::ptr maps = representation->RepresentationMap();
+        if (!geometry_reuse_ok_for_current_representation_ && maps->size() == 1)
+        {
+          // unfiltered_products contains products represented by this representation by means of
+          // mapped items. For example because of openings applied to products, reuse might not be
+          // acceptable and then the products will be processed by means of their immediate
+          // representation and not the mapped representation.
+
+          // IfcRepresentationMaps are also used for IfcTypeProducts, so an additional check is
+          // performed whether the map is indeed used by IfcMappedItems.
+          IfcSchema::IfcRepresentationMap *map = *maps->begin();
+          if (map->MapUsage()->size() > 0)
+          {
+            // _nextShape();
+            // continue;
+            // NOTE(sander): is this equivalent to _nextShape() ?
+            ifcproducts.reset();
+            all_done=true;
+          }
+        }
+
+        bool representation_processed_as_mapped_item = false;
+        IfcSchema::IfcRepresentation *representation_mapped_to =
+            kernel.representation_mapped_to(representation);
+        if (representation_mapped_to)
+        {
+          // Check if this representation has (or will be) processed as part its mapped
+          // representation
+          representation_processed_as_mapped_item =
+              ok_mapped_representations->contains(representation_mapped_to) ||
+              reuse_ok_(settings, kernel.products_represented_by(representation_mapped_to));
+        }
+
+        if (representation_processed_as_mapped_item)
+        {
+          ok_mapped_representations->push(representation_mapped_to);
+          // _nextShape();
+          // continue;
+          ifcproducts.reset();
+          all_done=true;
+        }
+
+        // Filter the products based on the set of entities and/or names being included or excluded
+        // for processing.
+        for (IfcSchema::IfcProduct::list::it jt = unfiltered_products->begin();
+             jt != unfiltered_products->end(); ++jt)
+        {
+          IfcSchema::IfcProduct *prod = *jt;
+          if (boost::all(filters_, filter_match(prod)))
+          {
+            ifcproducts->push(prod);
+          }
+        }
+
+        ifcproduct_iterator = ifcproducts->begin();
+      }
+
+      // Have we reached the end of our list of IfcProducts?
+      if (ifcproduct_iterator == ifcproducts->end())
+      {
+        // _nextShape();
+        // continue;
+        ifcproducts.reset();
+        all_done=true;
+      }
+
+
+      //////////// ?? no good, figure out loops
+      // next() does this and returns create()..
+      if (ifcproducts)
+      {
+        ++ifcproduct_iterator;
+      }
+
+
+      
+      // NOTE(sander) this right here segfaults
+      // IfcSchema::IfcProduct *product = *ifcproduct_iterator;
+      // Logger::SetProduct(product);
+ 
+      // BRepElement<real_t> *element;
+      // if (ifcproduct_iterator == ifcproducts->begin() ||
+      //     !geometry_reuse_ok_for_current_representation_)
+      // {
+      //   element =
+      //       kernel.create_brep_for_representation_and_product<P>(settings, representation, product);
+      // }
+      // else
+      // {
+      //   element = kernel.create_brep_for_processed_representation(settings, representation, product,
+      //                                                             current_shape_model);
+      // }
+      // Logger::SetProduct(boost::none);
+      // if (!element)
+      // {
+      //   _nextShape();
+      //   continue;
+      // }
+      // return element;
+
+    }
+ 
+  }
+   end = std::chrono::system_clock::now(); 
+  elapsed_seconds = end - start; 
+  Logger::Status("iterated over representations: "+std::to_string(elapsed_seconds.count() ));
+
+ 
 
   return 1;
 }
