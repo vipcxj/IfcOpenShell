@@ -377,6 +377,7 @@ std::vector<IfcproductRepresentation> IfcproductRepresentations;
     IfcSchema::IfcRepresentation *representation;
     representation = *representation_iterator;
     ifcproducts.reset();
+    // boost::shared_ptr(std::vector<IfcSchema::IfcProduct>) 
     ifcproducts = IfcSchema::IfcProduct::list::ptr(new IfcSchema::IfcProduct::list);
     IfcSchema::IfcProduct::list::ptr unfiltered_products =
         kernel.products_represented_by(representation);
@@ -438,8 +439,8 @@ std::vector<IfcproductRepresentation> IfcproductRepresentations;
     {
       IfcproductRepresentation ir;
       ir.index=index_count;
-      ir.product=*ifcproduct_iterator;
-      ir.representation=representation;
+      ir.product=std::move(*ifcproduct_iterator);
+      ir.representation=std::move(representation);
       IfcproductRepresentations.push_back(ir);
       index_count++;
     } // end for ifcproducts
