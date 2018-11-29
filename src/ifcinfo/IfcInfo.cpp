@@ -182,6 +182,7 @@ int main(int argc, char **argv)
   double lowest_precision_encountered = std::numeric_limits<double>::infinity();
   bool any_precision_encountered = false;
 
+
   IfcSchema::IfcRepresentation::list::ptr representations =
       IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
   IfcSchema::IfcRepresentation::list::it representation_iterator;

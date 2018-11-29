@@ -844,7 +844,6 @@ private:
         }
 
         bool representation_processed_as_mapped_item = false;
-
         IfcSchema::IfcRepresentation *representation_mapped_to =
             kernel.representation_mapped_to(representation);
         if (representation_mapped_to)

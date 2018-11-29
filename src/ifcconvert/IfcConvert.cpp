@@ -34,11 +34,13 @@
 #include "../ifcconvert/XmlSerializer.h"
 
 #include "../ifcgeom/IfcGeomIterator.h"
+#include "../ifcgeom/IfcGeomRenderStyles.h"
 
 #include <IGESControl_Controller.hxx>
 #include <Standard_Version.hxx>
 
 #include <boost/program_options.hpp>
+#include <boost/make_shared.hpp>
 
 #include <ctime>
 #include <fstream>
@@ -197,38 +199,46 @@ int main(int argc, char **argv)
 #ifdef USE_MMAP
       ("mmap", "use memory-mapped file for input")
 #endif
-          ("input-file", po::value<std::string>(),
-           "input IFC file")("output-file", po::value<std::string>(), "output geometry file");
+		("input-file", po::value<std::string>(), "input IFC file")
+		("output-file", po::value<std::string>(), "output geometry file");
+		
 
-  double deflection_tolerance;
-  inclusion_filter include_filter;
-  inclusion_traverse_filter include_traverse_filter;
-  exclusion_filter exclude_filter;
-  exclusion_traverse_filter exclude_traverse_filter;
-  std::string filter_filename;
+    double deflection_tolerance;
+    inclusion_filter include_filter;
+    inclusion_traverse_filter include_traverse_filter;
+    exclusion_filter exclude_filter;
+    exclusion_traverse_filter exclude_traverse_filter;
+    std::string filter_filename;
+    std::string default_material_filename;
 
-  po::options_description geom_options("Geometry options");
-  geom_options.add_options()(
-      "plan", "Specifies whether to include curves in the output result. Typically "
-              "these are representations of type Plan or Axis. Excluded by default.")(
-      "model", "Specifies whether to include surfaces and solids in the output result. "
-               "Typically these are representations of type Body or Facetation. "
-               "Included by default.")(
-      "weld-vertices", "Specifies whether vertices are welded, meaning that the coordinates "
-                       "vector will only contain unique xyz-triplets. This results in a "
-                       "manifold mesh which is useful for modelling applications, but might "
-                       "result in unwanted shading artefacts in rendering applications.")(
-      "use-world-coords", "Specifies whether to apply the local placements of building elements "
-                          "directly to the coordinates of the representation mesh rather than "
-                          "to represent the local placement in the 4x3 matrix, which will in that "
-                          "case be the identity matrix.")(
-      "convert-back-units", "Specifies whether to convert back geometrical output back to the "
-                            "unit of measure in which it is defined in the IFC file. Default is "
-                            "to use meters.")(
-      "sew-shells", "Specifies whether to sew the faces of IfcConnectedFaceSets together. "
-                    "This is a potentially time consuming operation, but guarantees a "
-                    "consistent orientation of surface normals, even if the faces are not "
-                    "properly oriented in the IFC file.")
+    po::options_description geom_options("Geometry options");
+	geom_options.add_options()
+		("plan",
+			"Specifies whether to include curves in the output result. Typically "
+			"these are representations of type Plan or Axis. Excluded by default.")
+		("model",
+			"Specifies whether to include surfaces and solids in the output result. "
+			"Typically these are representations of type Body or Facetation. "
+			"Included by default.")
+		("weld-vertices",
+			"Specifies whether vertices are welded, meaning that the coordinates "
+			"vector will only contain unique xyz-triplets. This results in a "
+			"manifold mesh which is useful for modelling applications, but might "
+			"result in unwanted shading artefacts in rendering applications.")
+		("use-world-coords", 
+			"Specifies whether to apply the local placements of building elements "
+			"directly to the coordinates of the representation mesh rather than "
+			"to represent the local placement in the 4x3 matrix, which will in that "
+			"case be the identity matrix.")
+		("convert-back-units",
+			"Specifies whether to convert back geometrical output back to the "
+			"unit of measure in which it is defined in the IFC file. Default is "
+			"to use meters.")
+		("sew-shells", 
+			"Specifies whether to sew the faces of IfcConnectedFaceSets together. "
+			"This is a potentially time consuming operation, but guarantees a "
+			"consistent orientation of surface normals, even if the faces are not "
+			"properly oriented in the IFC file.")
 #if OCC_VERSION_HEX < 0x60900
       // In Open CASCADE version prior to 6.9.0 boolean operations with multiple
       // arguments where not introduced yet and a work-around was implemented to
@@ -240,63 +250,53 @@ int main(int argc, char **argv)
        "introduce a performance improvement at the risk of failing, in "
        "which case the subtraction is applied one-by-one.")
 #endif
-          ("disable-opening-subtractions",
-           "Specifies whether to disable the boolean subtraction of "
-           "IfcOpeningElement Representations from their RelatingElements.")(
-              "enable-layerset-slicing",
-              "Specifies whether to enable the slicing of products according "
-              "to their associated IfcMaterialLayerSet.")(
-              "include", po::value<inclusion_filter>(&include_filter)->multitoken(),
-              "Specifies that the entities that match a specific filtering criteria are to be "
-              "included in the geometrical output:\n"
-              "1) 'entities': the following list of types should be included. SVG output defaults "
-              "to IfcSpace to be included. The entity names are handled case-insensitively.\n"
-              "2) 'layers': the entities that are assigned to presentation layers of which names "
-              "match the given values should be included.\n"
-              "3) 'arg <ArgumentName>': the following list of values for that specific argument "
-              "should be included. "
-              "Currently supported arguments are GlobalId, Name, Description, and Tag.\n\n"
-              "The values for 'layers' and 'arg' are handled case-sensitively (wildcards "
-              "supported)."
-              "--include and --exclude cannot be placed right before input file argument and "
-              "only single of each argument supported for now. See also --exclude.")(
-              "include+",
-              po::value<inclusion_traverse_filter>(&include_traverse_filter)->multitoken(),
-              "Same as --include but applies filtering also to the decomposition and/or "
-              "containment (IsDecomposedBy, "
-              "HasOpenings, FillsVoid, ContainedInStructure) of the filtered entity, e.g. "
-              "--include+=arg Name \"Level 1\" "
-              "includes entity with name \"Level 1\" and all of its children. See --include for "
-              "more information. ")("exclude",
-                                    po::value<exclusion_filter>(&exclude_filter)->multitoken(),
-                                    "Specifies that the entities that match a specific filtering "
-                                    "criteria are to be excluded in the geometrical output."
-                                    "See --include for syntax and more details. The default value "
-                                    "is '--exclude=entities IfcOpeningElement IfcSpace'.")(
-              "exclude+",
-              po::value<exclusion_traverse_filter>(&exclude_traverse_filter)->multitoken(),
-              "Same as --exclude but applies filtering also to the decomposition and/or "
-              "containment "
-              "of the filtered entity. See --include+ for more details.")(
-              "no-normals",
-              "Disables computation of normals. Saves time and file size and is useful "
-              "in instances where you're going to recompute normals for the exported "
-              "model in other modelling application in any case.")(
-              "deflection-tolerance", po::value<double>(&deflection_tolerance)->default_value(1e-3),
-              "Sets the deflection tolerance of the mesher, 1e-3 by default if not specified.")(
-              "generate-uvs", "Generates UVs (texture coordinates) by using simple box projection. "
-                              "Requires normals. "
-                              "Not guaranteed to work properly if used with --weld-vertices.")(
-              "filter-file", po::value<std::string>(&filter_filename),
-              "Specifies a filter file that describes the used filtering criteria. Supported "
-              "formats "
-              "are '--include=arg GlobalId ...' and 'include arg GlobalId ...'. Spaces and tabs "
-              "can be used as delimiters."
-              "Multiple filters of same type with different values can be inserted on their own "
-              "lines. "
-              "See --include, --include+, --exclude, and --exclude+ for more details.");
+		("disable-opening-subtractions", 
+			"Specifies whether to disable the boolean subtraction of "
+			"IfcOpeningElement Representations from their RelatingElements.")
+		("enable-layerset-slicing", 
+			"Specifies whether to enable the slicing of products according "
+			"to their associated IfcMaterialLayerSet.")
+        ("include", po::value<inclusion_filter>(&include_filter)->multitoken(),
+            "Specifies that the entities that match a specific filtering criteria are to be included in the geometrical output:\n"
+            "1) 'entities': the following list of types should be included. SVG output defaults "
+            "to IfcSpace to be included. The entity names are handled case-insensitively.\n"
+            "2) 'layers': the entities that are assigned to presentation layers of which names "
+            "match the given values should be included.\n"
+            "3) 'arg <ArgumentName>': the following list of values for that specific argument should be included. "
+            "Currently supported arguments are GlobalId, Name, Description, and Tag.\n\n"
+            "The values for 'layers' and 'arg' are handled case-sensitively (wildcards supported)."
+            "--include and --exclude cannot be placed right before input file argument and "
+            "only single of each argument supported for now. See also --exclude.")
+        ("include+", po::value<inclusion_traverse_filter>(&include_traverse_filter)->multitoken(),
+            "Same as --include but applies filtering also to the decomposition and/or containment (IsDecomposedBy, "
+            "HasOpenings, FillsVoid, ContainedInStructure) of the filtered entity, e.g. --include+=arg Name \"Level 1\" "
+            "includes entity with name \"Level 1\" and all of its children. See --include for more information. ")
+        ("exclude", po::value<exclusion_filter>(&exclude_filter)->multitoken(),
+            "Specifies that the entities that match a specific filtering criteria are to be excluded in the geometrical output."
+            "See --include for syntax and more details. The default value is '--exclude=entities IfcOpeningElement IfcSpace'.")
+        ("exclude+", po::value<exclusion_traverse_filter>(&exclude_traverse_filter)->multitoken(),
+            "Same as --exclude but applies filtering also to the decomposition and/or containment "
+            "of the filtered entity. See --include+ for more details.")
+        ("no-normals",
+            "Disables computation of normals. Saves time and file size and is useful "
+            "in instances where you're going to recompute normals for the exported "
+            "model in other modelling application in any case.")
+        ("deflection-tolerance", po::value<double>(&deflection_tolerance)->default_value(1e-3),
+            "Sets the deflection tolerance of the mesher, 1e-3 by default if not specified.")
+        ("generate-uvs",
+            "Generates UVs (texture coordinates) by using simple box projection. Requires normals. "
+            "Not guaranteed to work properly if used with --weld-vertices.")
+        ("filter-file", po::value<std::string>(&filter_filename),
+            "Specifies a filter file that describes the used filtering criteria. Supported formats "
+            "are '--include=arg GlobalId ...' and 'include arg GlobalId ...'. Spaces and tabs can be used as delimiters."
+            "Multiple filters of same type with different values can be inserted on their own lines. "
+            "See --include, --include+, --exclude, and --exclude+ for more details.")
+        ("default-material-file", po::value<std::string>(&default_material_filename),
+            "Specifies a material file that describes the material object types will have"
+            "if an object does not have any specified material in the IFC file.");
 
-  std::string bounds, offset_str;
+
+    std::string bounds, offset_str;
 #ifdef HAVE_ICU
   std::string unicode_mode;
 #endif
@@ -518,8 +518,22 @@ int main(int argc, char **argv)
   std::string output_extension = output_filename.substr(output_filename.size() - 4);
   boost::to_lower(output_extension);
 
-  Logger::SetOutput(&std::cout, &log_stream);
-  Logger::Verbosity(verbose ? Logger::LOG_NOTICE : Logger::LOG_ERROR);
+		if (!default_material_filename.empty()) {
+			try {
+				IfcGeom::set_default_style_file(default_material_filename);
+			} catch (const std::exception& e) {
+				std::cerr << "[Error] Could not read default material file " << default_material_filename << ":" << std::endl;
+				std::cerr << e.what() << std::endl;
+				return EXIT_FAILURE;
+			}
+		}
+
+    /// @todo Clean up this filter code further.
+    std::vector<geom_filter> used_filters;
+    if (include_filter.type != geom_filter::UNUSED) { used_filters.push_back(include_filter); }
+    if (include_traverse_filter.type != geom_filter::UNUSED) { used_filters.push_back(include_traverse_filter); }
+    if (exclude_filter.type != geom_filter::UNUSED) { used_filters.push_back(exclude_filter); }
+    if (exclude_traverse_filter.type != geom_filter::UNUSED) { used_filters.push_back(exclude_traverse_filter); }
 
   if (vmap.count("log-format") == 1)
   {
@@ -650,161 +664,96 @@ int main(int argc, char **argv)
 #if OCC_VERSION_HEX < 0x60900
   settings.set(IfcGeom::IteratorSettings::FASTER_BOOLEANS, merge_boolean_operands);
 #endif
-  settings.set(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS,
-               disable_opening_subtractions);
-  settings.set(IfcGeom::IteratorSettings::INCLUDE_CURVES, include_plan);
-  settings.set(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES, !include_model);
-  settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS, enable_layerset_slicing);
-  settings.set(IfcGeom::IteratorSettings::NO_NORMALS, no_normals);
-  settings.set(IfcGeom::IteratorSettings::GENERATE_UVS, generate_uvs);
-  settings.set(IfcGeom::IteratorSettings::SEARCH_FLOOR, use_element_hierarchy);
-  settings.set(IfcGeom::IteratorSettings::SITE_LOCAL_PLACEMENT, site_local_placement);
-  settings.set(IfcGeom::IteratorSettings::BUILDING_LOCAL_PLACEMENT, building_local_placement);
+	settings.set(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS, disable_opening_subtractions);
+	settings.set(IfcGeom::IteratorSettings::INCLUDE_CURVES,               include_plan);
+	settings.set(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES,  !include_model);
+	settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS,              enable_layerset_slicing);
+    settings.set(IfcGeom::IteratorSettings::NO_NORMALS, no_normals);
+    settings.set(IfcGeom::IteratorSettings::GENERATE_UVS, generate_uvs);
+	settings.set(IfcGeom::IteratorSettings::SEARCH_FLOOR, use_element_hierarchy);
+	settings.set(IfcGeom::IteratorSettings::SITE_LOCAL_PLACEMENT, site_local_placement);
+	settings.set(IfcGeom::IteratorSettings::BUILDING_LOCAL_PLACEMENT, building_local_placement);
 
-  settings.set(SerializerSettings::USE_ELEMENT_NAMES, use_element_names);
-  settings.set(SerializerSettings::USE_ELEMENT_GUIDS, use_element_guids);
-  settings.set(SerializerSettings::USE_MATERIAL_NAMES, use_material_names);
-  settings.set(SerializerSettings::USE_ELEMENT_TYPES, use_element_types);
-  settings.set(SerializerSettings::USE_ELEMENT_HIERARCHY, use_element_hierarchy);
-  settings.set_deflection_tolerance(deflection_tolerance);
-  settings.precision = precision;
 
-  GeometrySerializer *serializer;
-  if (output_extension == ".obj")
-  {
-    // Do not use temp file for MTL as it's such a small file.
-    const std::string mtl_filename = change_extension(output_filename, "mtl");
-    if (!use_world_coords)
-    {
-      Logger::Notice("Using world coords when writing WaveFront OBJ files");
-      settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS, true);
-    }
-    serializer = new WaveFrontOBJSerializer(output_temp_filename, mtl_filename, settings);
+    settings.set(SerializerSettings::USE_ELEMENT_NAMES, use_element_names);
+    settings.set(SerializerSettings::USE_ELEMENT_GUIDS, use_element_guids);
+    settings.set(SerializerSettings::USE_MATERIAL_NAMES, use_material_names);
+	settings.set(SerializerSettings::USE_ELEMENT_TYPES, use_element_types);
+	settings.set(SerializerSettings::USE_ELEMENT_HIERARCHY, use_element_hierarchy);
+    settings.set_deflection_tolerance(deflection_tolerance);
+    settings.precision = precision;
+
+	boost::shared_ptr<GeometrySerializer> serializer; /**< @todo use std::unique_ptr when possible */
+	if (output_extension == ".obj") {
+        // Do not use temp file for MTL as it's such a small file.
+        const std::string mtl_filename = change_extension(output_filename, "mtl");
+		if (!use_world_coords) {
+			Logger::Notice("Using world coords when writing WaveFront OBJ files");
+			settings.set(IfcGeom::IteratorSettings::USE_WORLD_COORDS, true);
+		}
+		serializer = boost::make_shared<WaveFrontOBJSerializer>(output_temp_filename, mtl_filename, settings);
 #ifdef WITH_OPENCOLLADA
-  }
-  else if (output_extension == ".dae")
-  {
-    serializer = new ColladaSerializer(output_temp_filename, settings);
+	} else if (output_extension == ".dae") {
+		serializer = boost::make_shared<ColladaSerializer>(output_temp_filename, settings);
 #endif
-  }
-  else if (output_extension == ".stp")
-  {
-    serializer = new StepSerializer(output_temp_filename, settings);
-  }
-  else if (output_extension == ".igs")
-  {
-    IGESControl_Controller::Init(); // work around Open Cascade bug
-    serializer = new IgesSerializer(output_temp_filename, settings);
-  }
-  else if (output_extension == ".svg")
-  {
-    settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
-    serializer = new SvgSerializer(output_temp_filename, settings);
-    if (vmap.count("section-height") != 0)
-    {
-      Logger::Notice("Overriding section height");
-      static_cast<SvgSerializer *>(serializer)->setSectionHeight(section_height);
-    }
-    if (bounding_width.is_initialized() && bounding_height.is_initialized())
-    {
-      static_cast<SvgSerializer *>(serializer)
-          ->setBoundingRectangle(bounding_width.get(), bounding_height.get());
-    }
-  }
-  else
-  {
-    std::cerr << "[Error] Unknown output filename extension '" + output_extension + "'\n";
-    write_log(!quiet);
-    print_usage();
-    return EXIT_FAILURE;
-  }
+	} else if (output_extension == ".stp") {
+		serializer = boost::make_shared<StepSerializer>(output_temp_filename, settings);
+	} else if (output_extension == ".igs") {
+		IGESControl_Controller::Init(); // work around Open Cascade bug
+		serializer = boost::make_shared<IgesSerializer>(output_temp_filename, settings);
+	} else if (output_extension == ".svg") {
+		settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
+		serializer = boost::make_shared<SvgSerializer>(output_temp_filename, settings);
+		if (vmap.count("section-height") != 0) {
+			Logger::Notice("Overriding section height");
+			static_cast<SvgSerializer*>(serializer.get())->setSectionHeight(section_height);
+		}
+		if (bounding_width.is_initialized() && bounding_height.is_initialized()) {
+            static_cast<SvgSerializer*>(serializer.get())->setBoundingRectangle(bounding_width.get(), bounding_height.get());
+		}
+	} else {
+        std::cerr << "[Error] Unknown output filename extension '" + output_extension + "'\n";
+		write_log(!quiet);
+		print_usage();
+		return EXIT_FAILURE;
+	}
 
-  // NOTE After this point, make sure to delete serializer upon application exit.
+    if (use_element_hierarchy && output_extension != ".dae") {
+        std::cerr << "[Error] --use-element-hierarchy can be used only with .dae output.\n";
+        /// @todo Lots of duplicate error-and-exit code.
+		write_log(!quiet);
+		print_usage();
+        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+		return EXIT_FAILURE;
+	}
 
-  if (use_element_hierarchy && output_extension != ".dae")
-  {
-    std::cerr << "[Error] --use-element-hierarchy can be used only with .dae output.\n";
-    write_log(!quiet);
-    print_usage();
-    delete serializer;
-    std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-    return EXIT_FAILURE;
-  }
+    const bool is_tesselated = serializer->isTesselated(); // isTesselated() doesn't change at run-time
+	if (!is_tesselated) {
+		if (weld_vertices) {
+            Logger::Notice("Weld vertices setting ignored when writing non-tesselated output");
+		}
+        if (generate_uvs) {
+            Logger::Notice("Generate UVs setting ignored when writing non-tesselated output");
+        }
+        if (center_model || model_offset) {
+            Logger::Notice("Centering/offsetting model setting ignored when writing non-tesselated output");
+        }
 
-  const bool is_tesselated =
-      serializer->isTesselated(); // isTesselated() doesn't change at run-time
-  if (!is_tesselated)
-  {
-    if (weld_vertices)
-    {
-      Logger::Notice("Weld vertices setting ignored when writing non-tesselated output");
-    }
-    if (generate_uvs)
-    {
-      Logger::Notice("Generate UVs setting ignored when writing non-tesselated output");
-    }
-    if (center_model || model_offset)
-    {
-      Logger::Notice(
-          "Centering/offsetting model setting ignored when writing non-tesselated output");
-    }
+        settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
+	}
 
-    settings.set(IfcGeom::IteratorSettings::DISABLE_TRIANGULATION, true);
-  }
+	if (!serializer->ready()) {
+        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+		write_log(!quiet);
+		return EXIT_FAILURE;
+	}
 
-  if (!serializer->ready())
-  {
-    delete serializer;
-    std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-    write_log(!quiet);
-    return EXIT_FAILURE;
-  }
-
-  time_t start, end;
-  time(&start);
-
-  if (!init_input_file(input_filename, ifc_file, no_progress || quiet, mmap))
-  {
-    return EXIT_FAILURE;
-  }
-
-  IfcGeom::Iterator<real_t> context_iterator(settings, &ifc_file, filter_funcs);
-  if (!context_iterator.initialize())
-  {
-    /// @todo It would be nice to know and print separate error prints for a case where we found no
-    /// entities and for a case we found no entities that satisfy our filtering criteria.
-    Logger::Error("No geometrical entities found");
-    delete serializer;
-    std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
-    write_log(!quiet);
-    return EXIT_FAILURE;
-  }
-
-  serializer->setFile(context_iterator.getFile());
-
-  if (convert_back_units)
-  {
-    serializer->setUnitNameAndMagnitude(context_iterator.getUnitName(),
-                                        static_cast<float>(context_iterator.getUnitMagnitude()));
-  }
-  else
-  {
-    serializer->setUnitNameAndMagnitude("METER", 1.0f);
-  }
-
-  serializer->writeHeader();
-
-  int old_progress = quiet ? 0 : -1;
-
-  if (is_tesselated && (center_model || model_offset))
-  {
-    double *offset = serializer->settings().offset;
-    if (center_model)
-    {
-      if (site_local_placement || building_local_placement)
-      {
-        Logger::Error("Cannot use --center-model together with --{site,building}-local-placement");
-        delete serializer;
+	time_t start,end;
+	time(&start);
+	
+    if (!init_input_file(input_filename, ifc_file, no_progress || quiet, mmap)) {
+        write_log(!quiet);
+        std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
         return EXIT_FAILURE;
       }
 
@@ -819,55 +768,54 @@ int main(int argc, char **argv)
       offset[1] = -center.Y();
       offset[2] = -center.Z();
     }
-    else
-    {
-      if (sscanf(offset_str.c_str(), "%lf;%lf;%lf", &offset[0], &offset[1], &offset[2]) != 3)
-      {
-        std::cerr << "[Error] Invalid use of --model-offset\n";
-        delete serializer;
+
+    IfcGeom::Iterator<real_t> context_iterator(settings, &ifc_file, filter_funcs);
+    if (!context_iterator.initialize()) {
+        /// @todo It would be nice to know and print separate error prints for a case where we found no entities
+        /// and for a case we found no entities that satisfy our filtering criteria.
+        Logger::Error("No geometrical entities found");
         std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
         print_options(serializer_options);
         return EXIT_FAILURE;
       }
     }
 
-    std::stringstream msg;
-    msg << "Using model offset (" << offset[0] << "," << offset[1] << "," << offset[2] << ")";
-    Logger::Notice(msg.str());
-  }
+    serializer->setFile(context_iterator.getFile());
 
-  if (!quiet)
-  {
-    Logger::Status("Creating geometry...");
-  }
+	if (convert_back_units) {
+		serializer->setUnitNameAndMagnitude(context_iterator.getUnitName(), static_cast<float>(context_iterator.getUnitMagnitude()));
+	} else {
+		serializer->setUnitNameAndMagnitude("METER", 1.0f);
+	}
 
-  // The functions IfcGeom::Iterator::get() and IfcGeom::Iterator::next()
-  // wrap an iterator of all geometrical products in the Ifc file.
-  // IfcGeom::Iterator::get() returns an IfcGeom::TriangulationElement or
-  // -BRepElement pointer, based on current settings. (see IfcGeomIterator.h
-  // for definition) IfcGeom::Iterator::next() is used to poll whether more
-  // geometrical entities are available. None of these functions throw
-  // exceptions, neither for parsing errors or geometrical errors. Upon
-  // calling next() the entity to be returned has already been processed, a
-  // non-null return value guarantees that a successfully processed product is
-  // available.
-  size_t num_created = 0;
+	serializer->writeHeader();
 
-  //////////////////////////////////////////////////////////////////////////////
-  //////////////////////////////////////////////////////////////////////////////
-  
-  do
-  {
-    IfcGeom::Element<real_t> *geom_object = context_iterator.get();
+	int old_progress = quiet ? 0 : -1;
 
-    if (is_tesselated)
-    {
-      serializer->write(static_cast<const IfcGeom::TriangulationElement<real_t> *>(geom_object));
-    }
-    else
-    {
-      serializer->write(static_cast<const IfcGeom::BRepElement<real_t> *>(geom_object));
-    }
+    if (is_tesselated && (center_model || model_offset)) {
+        double* offset = serializer->settings().offset;
+        if (center_model) {
+			if (site_local_placement || building_local_placement) {
+				Logger::Error("Cannot use --center-model together with --{site,building}-local-placement");
+				return EXIT_FAILURE;
+			}
+
+            if (!quiet) Logger::Status("Computing bounds...");
+            context_iterator.compute_bounds();
+            if (!quiet) Logger::Status("Done!");
+
+            gp_XYZ center = (context_iterator.bounds_min() + context_iterator.bounds_max()) * 0.5;
+            offset[0] = -center.X();
+            offset[1] = -center.Y();
+            offset[2] = -center.Z();
+        } else {
+            if (sscanf(offset_str.c_str(), "%lf;%lf;%lf", &offset[0], &offset[1], &offset[2]) != 3) {
+                std::cerr << "[Error] Invalid use of --model-offset\n";
+                std::remove(output_temp_filename.c_str()); /**< @todo Windows Unicode support */
+                print_options(serializer_options);
+                return EXIT_FAILURE;
+            }
+        }
 
     if (!no_progress)
     {
@@ -887,83 +835,58 @@ int main(int argc, char **argv)
         {
           std::cerr << std::flush;
         }
-      }
-      else
-      {
-        const int progress = context_iterator.progress() / 2;
-        if (old_progress != progress)
-          Logger::ProgressBar(progress);
-        old_progress = progress;
-      }
+    } while (++num_created, context_iterator.next());
+
+	if (!no_progress && quiet) {
+		for (; old_progress < 100; ++old_progress) {
+			std::cout << ".";
+			if (stderr_progress)
+				std::cerr << ".";
+		}
+		std::cout << std::flush;
+		if (stderr_progress)
+			std::cerr << std::flush;
+	} else {
+		Logger::Status("\rDone creating geometry (" + boost::lexical_cast<std::string>(num_created) +
+			" objects)                                ");
+	}
+
+    serializer->finalize();
+    // Make sure the dtor is explicitly run here (e.g. output files are closed before renaming them).
+    serializer.reset();
+
+    // Renaming might fail (e.g. maybe the existing file was open in a viewer application)
+    // Do not remove the temp file as user can salvage the conversion result from it.
+    bool successful = rename_file(output_temp_filename, output_filename);
+    if (!successful) {
+        Logger::Error("Unable to write output file '" + output_filename + "', see '" +
+            output_temp_filename + "' for the conversion result.");
     }
-    // Logger::Status("\rcreating geometry ("
-    //                + boost::lexical_cast<std::string>(num_created)
-    //                + " objects)                                ");
 
-  } while (++num_created, context_iterator.next());
+	write_log(!quiet);
 
-  if (!no_progress && quiet)
-  {
-    for (; old_progress < 100; ++old_progress)
-    {
-      std::cout << ".";
-      if (stderr_progress)
-      {
-        std::cerr << ".";
-      }
-    }
-    std::cout << std::flush;
-    if (stderr_progress)
-    {
-      std::cerr << std::flush;
-    }
-  }
-  else
-  {
-    Logger::Status("\rDone creating geometry (" + std::to_string(num_created) +
-                   " objects)                                ");
-  }
+	time(&end);
 
-  serializer->finalize();
-  delete serializer;
+	if (!quiet) {
+		int seconds = (int)difftime(end, start);
+		std::stringstream msg;
+		int minutes = seconds / 60;
+		seconds = seconds % 60;
+		msg << "\nConversion took";
+		if (minutes > 0) {
+			msg << " " << minutes << " minute";
+			if (minutes > 1) {
+				msg << "s";
+			}
+		}
+		msg << " " << seconds << " second";
+		if (seconds > 1) {
+			msg << "s";
+		}
+		Logger::Status(msg.str());
+	}
 
-  // Renaming might fail (e.g. maybe the existing file was open in a viewer application)
-  // Do not remove the temp file as user can salvage the conversion result from it.
-  bool successful = rename_file(output_temp_filename, output_filename);
-  if (!successful)
-  {
-    Logger::Error("Unable to write output file '" + output_filename + "', see '" +
-                  output_temp_filename + "' for the conversion result.");
-  }
-
-  write_log(!quiet);
-
-  time(&end);
-
-  if (!quiet)
-  {
-    int seconds = static_cast<int>(difftime(end, start));
-    std::stringstream msg;
-    int minutes = seconds / 60;
-    seconds = seconds % 60;
-    msg << "\nConversion took";
-    if (minutes > 0)
-    {
-      msg << " " << minutes << " minute";
-      if (minutes > 1)
-      {
-        msg << "s";
-      }
-    }
-    msg << " " << seconds << " second";
-    if (seconds > 1)
-    {
-      msg << "s";
-    }
-    Logger::Status(msg.str());
-  }
-
-  return successful ? EXIT_SUCCESS : EXIT_FAILURE;
+    return successful ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
 void write_log(bool header)
