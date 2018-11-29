@@ -182,8 +182,17 @@ int main(int argc, char **argv)
   double lowest_precision_encountered = std::numeric_limits<double>::infinity();
   bool any_precision_encountered = false;
 
-  IfcSchema::IfcRepresentation::list::ptr representations =
-      IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
+  //typedef IfcTemplatedEntityList< IfcRepresentation > list;
+  //typedef boost::shared_ptr< IfcTemplatedEntityList<T> > ptr;
+
+  // IfcTemplatedEntityList<IfcSchema::IfcRepresentation> list_representations; 
+
+  boost::shared_ptr< IfcTemplatedEntityList <IfcSchema::IfcRepresentation> >
+                      representations=
+  boost::shared_ptr< IfcTemplatedEntityList <IfcSchema::IfcRepresentation> >
+                    (new  IfcTemplatedEntityList <IfcSchema::IfcRepresentation> ) ;
+  //IfcSchema::IfcRepresentation::list::ptr representations =IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
+
   IfcSchema::IfcRepresentation::list::it representation_iterator;
   IfcSchema::IfcRepresentation::list::ptr ok_mapped_representations;
   IfcSchema::IfcGeometricRepresentationContext::list::ptr contexts =
