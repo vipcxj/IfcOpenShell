@@ -58,6 +58,10 @@
 #include <sstream>
 #include <time.h>
 
+
+#include <future>
+#include <thread>
+
 #if USE_VLD
 #include <vld.h>
 #endif
@@ -110,6 +114,17 @@ bool reuse_ok_(SerializerSettings settings, const IfcSchema::IfcProduct::list::p
   }
   return associated_single_materials.size() == 1;
 }
+
+struct IfcproductRepresentation
+{
+  int index;
+  IfcSchema::IfcRepresentation *representation;
+  IfcSchema::IfcProduct *product;
+  IfcGeom::Element<real_t> * geom_object;
+};
+
+std::vector<IfcproductRepresentation> IfcproductRepresentations;
+void create_element(IfcproductRepresentation &rep);
 
 int main(int argc, char **argv)
 {
@@ -187,14 +202,19 @@ int main(int argc, char **argv)
 
   // IfcTemplatedEntityList<IfcSchema::IfcRepresentation> list_representations; 
 
-  boost::shared_ptr< IfcTemplatedEntityList <IfcSchema::IfcRepresentation> >
-                      representations=
-  boost::shared_ptr< IfcTemplatedEntityList <IfcSchema::IfcRepresentation> >
-                    (new  IfcTemplatedEntityList <IfcSchema::IfcRepresentation> ) ;
-  //IfcSchema::IfcRepresentation::list::ptr representations =IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
+  // boost::shared_ptr< IfcTemplatedEntityList <IfcSchema::IfcRepresentation> >
+  //                     representations=
+  // boost::shared_ptr< IfcTemplatedEntityList <IfcSchema::IfcRepresentation> >
+  //                   (new  IfcTemplatedEntityList <IfcSchema::IfcRepresentation> ) ;
 
+  // std::vector<IfcSchema::IfcRepresentation*> representations;
+  // std::vector<IfcSchema::IfcRepresentation*>::iterator representation_iterator;
+
+  IfcSchema::IfcRepresentation::list::ptr representations =IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
   IfcSchema::IfcRepresentation::list::it representation_iterator;
-  IfcSchema::IfcRepresentation::list::ptr ok_mapped_representations;
+
+  IfcSchema::IfcRepresentation::list::ptr ok_mapped_representations=IfcSchema::IfcRepresentation::list::ptr(new IfcSchema::IfcRepresentation::list);
+ 
   IfcSchema::IfcGeometricRepresentationContext::list::ptr contexts =
       ifc_file.entitiesByType<IfcSchema::IfcGeometricRepresentationContext>();
   IfcSchema::IfcGeometricRepresentationContext::list::ptr filtered_contexts(
@@ -260,10 +280,18 @@ int main(int argc, char **argv)
 
   Logger::Status("Iterate over filtered_contexts ... ");
   start = std::chrono::system_clock::now();
+  int count=0;
   for (it = filtered_contexts->begin(); it != filtered_contexts->end(); ++it)
   {
     IfcSchema::IfcGeometricRepresentationContext *context = *it;
     representations->push(context->RepresentationsInContext());
+    // for (std::vector<IfcSchema::IfcRepresentation*>::const_iterator it =
+    //          context->RepresentationsInContext()->begin();
+    //      it!=context->RepresentationsInContext()->end();++it)
+    // {
+    // representations.push_back(*it);   
+    // }
+    
     try
     {
       if (context->hasPrecision() && context->Precision() < lowest_precision_encountered)
@@ -276,14 +304,24 @@ int main(int argc, char **argv)
     {
       Logger::Error(e);
     }
+
     IfcSchema::IfcGeometricRepresentationSubContext::list::ptr sub_contexts =
         context->HasSubContexts();
     for (jt = sub_contexts->begin(); jt != sub_contexts->end(); ++jt)
     {
       representations->push((*jt)->RepresentationsInContext());
+      // for (std::vector<IfcSchema::IfcRepresentation*>::const_iterator it = (*jt)->RepresentationsInContext()->begin();
+      //      it!=(*jt)->RepresentationsInContext()->end();++it)
+      // {
+      //   representations.push_back(*it);   
+      // }
     }
     // There is no need for full recursion as the following is governed by the schema:
     // WR31: The parent context shall not be another geometric representation sub context.
+
+    Logger::Status("filter_context #: "+ std::to_string(count));
+    count++;
+    
   }
   end = std::chrono::system_clock::now();
   elapsed_seconds = end - start;
@@ -369,26 +407,17 @@ int main(int argc, char **argv)
     IfcSchema::IfcProduct *product;
   };
   
-struct IfcproductRepresentation
+Logger::Status("starting to iterate over representations ");
+
+start = std::chrono::system_clock::now();
+int index_count=0;
+for (representation_iterator = representations->begin();
+     representation_iterator != representations->end(); representation_iterator++)
 {
-  int index;
-  IfcSchema::IfcRepresentation *representation;
-  IfcSchema::IfcProduct *product;
-};
-
-std::vector<IfcproductRepresentation> IfcproductRepresentations;
-
-  start = std::chrono::system_clock::now();
-  int index_count=0;
-  for (representation_iterator = representations->begin();
-       representation_iterator != representations->end(); representation_iterator++)
-  {
-    IfcSchema::IfcRepresentation *representation;
-    representation = *representation_iterator;
-    ifcproducts.reset();
-    // boost::shared_ptr(std::vector<IfcSchema::IfcProduct>) 
-    ifcproducts = IfcSchema::IfcProduct::list::ptr(new IfcSchema::IfcProduct::list);
-    IfcSchema::IfcProduct::list::ptr unfiltered_products =
+  IfcSchema::IfcRepresentation* representation = *representation_iterator;
+  ifcproducts.reset();
+  ifcproducts = IfcSchema::IfcProduct::list::ptr(new IfcSchema::IfcProduct::list);
+  IfcSchema::IfcProduct::list::ptr unfiltered_products =
         kernel.products_represented_by(representation);
     geometry_reuse_ok_for_current_representation_ = reuse_ok_(settings, unfiltered_products);
     IfcSchema::IfcRepresentationMap::list::ptr maps = representation->RepresentationMap();
@@ -418,19 +447,17 @@ std::vector<IfcproductRepresentation> IfcproductRepresentations;
     {
       // Check if this representation has (or will be) processed as part its mapped
       // representation
-      representation_processed_as_mapped_item =
-          ok_mapped_representations->contains(representation_mapped_to) ||
-          reuse_ok_(settings, kernel.products_represented_by(representation_mapped_to));
+      bool contains = ok_mapped_representations->contains(representation_mapped_to);
+      bool reuse = reuse_ok_(settings, kernel.products_represented_by(representation_mapped_to));
+      representation_processed_as_mapped_item = contains||reuse;
     }
     if (representation_processed_as_mapped_item)
     {
       ok_mapped_representations->push(representation_mapped_to);
       // _nextShape();
       // continue;
-      
       continue;
     }
-
     // Filter the products based on the set of entities and/or names being included or excluded
     // for processing.
     for (IfcSchema::IfcProduct::list::it jt = unfiltered_products->begin();
@@ -443,13 +470,14 @@ std::vector<IfcproductRepresentation> IfcproductRepresentations;
       }
     } // end for unfiltered_products
 
+
     for (ifcproduct_iterator = ifcproducts->begin(); ifcproduct_iterator != ifcproducts->end();
          ifcproduct_iterator++)
     {
       IfcproductRepresentation ir;
       ir.index=index_count;
-      ir.product=std::move(*ifcproduct_iterator);
-      ir.representation=std::move(representation);
+      ir.product=*ifcproduct_iterator;
+      ir.representation=representation;
       IfcproductRepresentations.push_back(ir);
       index_count++;
     } // end for ifcproducts
@@ -458,6 +486,51 @@ std::vector<IfcproductRepresentation> IfcproductRepresentations;
   end = std::chrono::system_clock::now();
   elapsed_seconds = end - start;
   Logger::Status("iterated over representations: " + std::to_string(elapsed_seconds.count()));
+  Logger::Status("count: " + std::to_string(index_count));
+
+
+const unsigned int conc_threads = std::thread::hardware_concurrency();
+std::cout << "amount of threads available for use on this machine: " << conc_threads << std::endl;
+
+
+  std::vector<std::future<void>> threadpool;
+  count = 0;
+
+  for (int j = 0; j < (int)IfcproductRepresentations.size();)
+  {
+    IfcproductRepresentation &r = IfcproductRepresentations[j];
+    if (threadpool.size() < conc_threads)
+    {
+      std::future<void> fu =
+          std::async(std::launch::async, create_element, std::ref(r));
+      threadpool.emplace_back(std::move(fu));
+      j++;
+    } else {
+      bool waiting = true;
+      while (waiting) {
+        for (int i = 0; i < (int)threadpool.size(); i++) {
+          std::future<void> &fu = threadpool[i];
+          std::future_status status;
+          status = fu.wait_for(std::chrono::seconds(0));
+          if (status == std::future_status::ready) {
+            fu.get();
+            threadpool.erase(threadpool.begin() + i);
+            waiting = false;
+          }//if
+        }//for
+      }//while
+    }//else
+  }
+  for (std::future<void> &fu : threadpool) {
+    fu.get();
+  }
+
 
   return 1;
+}
+
+void create_element(IfcproductRepresentation &rep)
+{
+  Logger::Status("processing item #: "+std::to_string(rep.index));
+  return;
 }
