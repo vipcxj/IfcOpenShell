@@ -138,11 +138,11 @@ IfcGeom::ShapeType IfcGeom::Kernel::shape_type(const IfcBaseClass *l)
                                         Type::IfcSurfaceCurveSweptAreaSolid,
                                         Type::IfcSweptDiskSolid};
 
+#ifdef USE_IFC4
   std::vector<Type::Enum> shape_list_ifc4 = {
       Type::IfcCylindricalSurface, Type::IfcAdvancedBrep, Type::IfcBSplineSurfaceWithKnots,
       Type::IfcTriangulatedFaceSet, Type::IfcExtrudedAreaSolidTapered};
 
-#ifdef USE_IFC4
   shape_list.insert(shape_list.end(), shape_list_ifc4.begin(), shape_list_ifc4.end());
 #endif
 

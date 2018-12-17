@@ -148,11 +148,13 @@ namespace IfcParse {
 	private:
 		IfcCharacterDecoder* decoder;
 		//storage for temporary string without allocation
-		mutable std::string _tempString;
 		unsigned int skipWhitespace();
 		unsigned int skipComment();
 	public:
-		std::string &GetTempString() const { return _tempString; }
+		std::string &GetTempString() const {
+			static __thread std::string s;
+			return s; 
+		}
 		IfcSpfStream* stream;
 		IfcFile* file;
 		IfcSpfLexer(IfcSpfStream* s, IfcFile* f);

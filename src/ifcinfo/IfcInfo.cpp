@@ -148,6 +148,11 @@ int main(int argc, char **argv)
   end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = end - start;
   Logger::Status("Ifc_File.Init duration: " + std::to_string(elapsed_seconds.count()));
+  
+  // Load all instance data to reduce threading issues
+  for (auto& inst : ifc_file) {
+    inst.second->entity->load();
+  }
 
   SerializerSettings settings;
   /// @todo Make APPLY_DEFAULT_MATERIALS configurable? Quickly tested setting this to false and
@@ -163,7 +168,7 @@ int main(int argc, char **argv)
   settings.set(IfcGeom::IteratorSettings::DISABLE_OPENING_SUBTRACTIONS, true);
   settings.set(IfcGeom::IteratorSettings::INCLUDE_CURVES, false);
   settings.set(IfcGeom::IteratorSettings::EXCLUDE_SOLIDS_AND_SURFACES, true);
-  settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS, true);
+  settings.set(IfcGeom::IteratorSettings::APPLY_LAYERSETS, false);
   settings.set(IfcGeom::IteratorSettings::NO_NORMALS, false);
   settings.set(IfcGeom::IteratorSettings::GENERATE_UVS, true);
   settings.set(IfcGeom::IteratorSettings::SEARCH_FLOOR, true);
